@@ -4,12 +4,12 @@
 #include "boards.h"
 #include <math.h>
 
-#define BLINKY_LED_DELAY 300
-#define BLINKY_CIRCLE_DELAY (BLINKY_LED_DELAY * 3)
-#define BLINKY_BOARD_NUMBER 6584
+#define BLINKY_LED_DELAY 300 /* ms */
+#define BLINKY_CIRCLE_DELAY (BLINKY_LED_DELAY * 3) /* ms */
+#define BLINKY_BOARD_NUMBER 6584 /* stock number of a board (#ABCD) */
 #define BLINKY_GET_DIGIT(number, pos) ((number / (int)pow(10, pos)) % 10) /* Get out digit from a number right to left, starting from 0 */
 
-/* Function to blink the certain len the certain times. */
+/* Function to blink the certain led the certain times. */
 void blinky_led_blink(uint32_t led_idx, size_t blink_repeat)
 {
     for (size_t i = 0; i < blink_repeat; ++i)
@@ -39,6 +39,24 @@ int main(void)
         blinky_led_blink(BSP_BOARD_LED_1, p1);
         blinky_led_blink(BSP_BOARD_LED_2, p2);
         blinky_led_blink(BSP_BOARD_LED_3, p3);
+        nrf_delay_ms(BLINKY_CIRCLE_DELAY);
+        
+        /* just funny carusel*/
+        bsp_board_led_on(1);
+        bsp_board_led_on(2);
+        nrf_delay_ms(BLINKY_CIRCLE_DELAY);
+        bsp_board_led_off(1);
+        bsp_board_led_off(2);
+        bsp_board_led_on(2);
+        bsp_board_led_on(3);
+        nrf_delay_ms(BLINKY_CIRCLE_DELAY);
+        bsp_board_led_off(2);
+        bsp_board_led_off(3);
+        bsp_board_led_on(1);
+        bsp_board_led_on(3);
+        nrf_delay_ms(BLINKY_CIRCLE_DELAY);
+        bsp_board_led_off(1);
+        bsp_board_led_off(3);
         nrf_delay_ms(BLINKY_CIRCLE_DELAY);
     }
 
