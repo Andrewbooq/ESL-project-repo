@@ -4,8 +4,8 @@ OUTPUT_DIRECTORY := _build
 DFU_PACKAGE      := $(OUTPUT_DIRECTORY)/nrf52840_xxaa.dfu
 DFU_PORT         ?= /dev/ttyACM0
 
-SDK_ROOT ?= ../../../esl-nsdk
-PROJ_DIR := ../..
+SDK_ROOT         ?= ../../../esl-nsdk
+PROJ_DIR         := ../..
 
 $(OUTPUT_DIRECTORY)/nrf52840_xxaa.out: \
   LINKER_SCRIPT  := blinky_gcc_nrf52.ld
@@ -81,6 +81,10 @@ CFLAGS += -mfloat-abi=hard -mfpu=fpv4-sp-d16
 # keep every function in a separate section, this allows linker to discard unused ones
 CFLAGS += -ffunction-sections -fdata-sections -fno-strict-aliasing
 CFLAGS += -fno-builtin -fshort-enums
+ifdef DEBUG
+$(info DEBUG MODE)
+CFLAGS += -DDEBUG_NRF
+endif
 
 # C++ flags common to all targets
 CXXFLAGS += $(OPT)
