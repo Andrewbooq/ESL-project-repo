@@ -1,1 +1,8 @@
-blinky/pca10059/mbr/armgcc/_build/
+*.bin
+*.dfu
+*.hex
+*.in
+*.map
+*.out
+*.d
+*.o
