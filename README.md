@@ -10,7 +10,7 @@
 - After the branch is merged to master it's necessary to create a tag with name that is the same to the branch but without any prefix (WS4_pwm_and_double_click).
 - 
 ## 3 Comments
-- Comments to Pull Requests should be multiline. First line inludes the workshop number and description (Workshop3: Use GPIO), next line - empty, next line refers to a task number in thr project (Related to #17):
+- Comments to Pull Requests should be multiline. First line inludes the workshop number and description (Workshop3: Use GPIO), next line - empty, next line refers to a task number in the project (Related to #17):
   ```
   Workshop3: Use GPIO
   
