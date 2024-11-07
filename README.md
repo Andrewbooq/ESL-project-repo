@@ -23,6 +23,7 @@ It is supported by most of the nRF Connect for Desktop apps and will automatical
 The nRF52840 Dongle is supported by nRF Connect for Desktop as well as programming through nRFUtil.
 
 [DataSheet nRF52840 PCA10059 USB Dongle rev2.1.1](https://github.com/user-attachments/files/17661709/DataSheet.nRF52840.PCA10059.USB.Dongle.v2.1.1.pdf)
+
 [pca10059_schematic_and_pcb](https://github.com/user-attachments/files/17661461/pca10059_schematic_and_pcb.pdf)
 
 ## The common rules for the current repo
