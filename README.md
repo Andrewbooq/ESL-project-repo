@@ -1,9 +1,9 @@
-#The common rules for the current repo
+# The common rules for the current repo
 
-##1 Tasks and projects
-- All work shold be under tasks in (ESL-project)[https://github.com/users/Andrewbooq/projects/2].
+## 1 Tasks and projects
+- All work shold be under tasks in [ESL-project](https://github.com/users/Andrewbooq/projects/2).
 
-##2 Naming of branches and tags
+## 2 Naming of branches and tags
 - A branch for a new workshop should have prefix feature/ and includes Workshop number (feature/WS4_pwm_and_double_click).
 - A branch for a bug fix should have prefix bug/ (bug/WS4_cover_debouncing_all_cases).
 - After brunch is done (all commits are pushed) it's necessary to Merge the branch to master over Pull Request.
