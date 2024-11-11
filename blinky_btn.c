@@ -1,4 +1,6 @@
 #include "blinky_btn.h"
+#include "nrfx_gpiote.h"
+#include "app_timer.h"
 
 #define BLINKY_BTN_0                        NRF_GPIO_PIN_MAP(1, 6)  /* 0 SW1 */
 #define BLINKY_BTN_ACTIVE_STATE             0

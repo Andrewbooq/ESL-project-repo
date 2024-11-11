@@ -1,4 +1,5 @@
 #include "blinky_led.h"
+#include "nrfx_systick.h"
 
 #define BLINKY_LEDS_ON_BOARD        4
 

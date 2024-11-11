@@ -10,6 +10,8 @@
 #include "app_usbd.h"
 #include "app_usbd_serial_num.h"
 
+#include "app_timer.h"
+
 #include "nrf_drv_clock.h"
 #include "nrfx_gpiote.h"
 
