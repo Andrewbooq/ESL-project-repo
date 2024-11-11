@@ -3,25 +3,28 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "app_timer.h"
+#include "nrf_log.h"
+#include "nrf_log_ctrl.h"
+#include "nrf_log_default_backends.h"
+#include "nrf_log_backend_usb.h"
+#include "app_usbd.h"
+#include "app_usbd_serial_num.h"
+
 #include "nrf_drv_clock.h"
-#include "nrf_delay.h"
-#include "boards.h"
+#include "nrfx_gpiote.h"
+
 #include "blinky_led.h"
+#include "blinky_btn.h"
 #include "blinky_assert.h"
 
-#define BLINKY_LED_0    0
-#define BLINKY_LED_1    1
-#define BLINKY_LED_2    2
-#define BLINKY_LED_3    3
+#define BLINKY_LED_0        0
+#define BLINKY_LED_1        1
+#define BLINKY_LED_2        2
+#define BLINKY_LED_3        3
 
-/* BUTTON */
-#define BLINKY_BTN_0            NRF_GPIO_PIN_MAP(1, 6)  /* 0 SW1 */
-#define BLINKY_BTN_ACTIVE_STATE 0
 
-#define BLINKY_LED_DELAY_MS         300
-#define BLINKY_CIRCLE_DELAY_MS      (BLINKY_LED_DELAY_MS * 3)
-#define BLINKY_DELAY_STEP_MS        (BLINKY_LED_DELAY_MS / 10)  /* sampling rate */
+#define BLINKY_LED_DELAY_MS                 1000
+#define BLINKY_CIRCLE_DELAY_MS              (BLINKY_LED_DELAY_MS * 3)
 
 /* stock number of a board (#ABCD) */
 #define BLINKY_SN_A         6
@@ -29,8 +32,13 @@
 #define BLINKY_SN_C         8
 #define BLINKY_SN_D         4
 
-static volatile bool g_timer_idle;
-APP_TIMER_DEF(g_timer_one);
+typedef struct
+{
+    uint32_t time_begin;
+    uint32_t time_current;
+    uint32_t time_left;
+
+} delay_time_t;
 
 typedef enum
 { 
@@ -64,14 +72,16 @@ typedef struct
     uint32_t queue_index;
  } queue_t;
 
-void blinky_btn_init(void)
-{
-    nrf_gpio_cfg_input(BLINKY_BTN_0, NRF_GPIO_PIN_PULLUP);
-}
+static volatile bool g_timer_delay_idle = false;
+static volatile bool g_play = false;
 
-void blinky_put_blink(queue_t* queue, uint32_t led_idx, uint32_t blink_repeat, uint32_t first_index)
+APP_TIMER_DEF(g_timer_delay);
+
+static delay_time_t g_delay_time = { 0 };
+
+static void blinky_put_blink(queue_t* queue, uint32_t led_idx, uint32_t blink_repeat, uint32_t first_index)
 {
-    ASSERT(queue != NULL);
+    ASSERT(NULL != queue);
 
     for (uint32_t i = 0; i < blink_repeat; ++i)
     {
@@ -88,7 +98,7 @@ void blinky_put_blink(queue_t* queue, uint32_t led_idx, uint32_t blink_repeat, u
 
 void blinky_array_init(queue_t* queue)
 {
-    ASSERT(queue != NULL);
+    ASSERT(NULL != queue);
 
     queue->queue_size = NRFX_ARRAY_SIZE(queue->queue_states);
 
@@ -103,24 +113,84 @@ void blinky_array_init(queue_t* queue)
     node->data.delay = BLINKY_CIRCLE_DELAY_MS;
 }
 
-void app_timer_timeout_handler(void * p_context)
+void blinky_pause_delay_timer(void)
 {
-    app_timer_stop(g_timer_one);
-    g_timer_idle = false;
+    app_timer_stop(g_timer_delay);
+    uint32_t time_end = app_timer_cnt_get();
+    
+    ASSERT(time_end > g_delay_time.time_begin);
+    uint32_t time_diff = app_timer_cnt_diff_compute(time_end, g_delay_time.time_begin);
+    
+    ASSERT( APP_TIMER_TICKS(g_delay_time.time_current) > time_diff);
+    g_delay_time.time_left = APP_TIMER_TICKS(g_delay_time.time_current) - time_diff;
+    
+    NRF_LOG_INFO("pause time, left: %u ticks", g_delay_time.time_left);
 }
 
-void blinky_prepare_next_node(queue_t* queue)
+void blinky_resume_delay_timer(void)
 {
+    NRF_LOG_INFO("resume time, left: %u ticks", g_delay_time.time_left);
+    ASSERT(NRF_SUCCESS == app_timer_start(g_timer_delay, g_delay_time.time_left, NULL));
+    g_delay_time.time_begin = app_timer_cnt_get();
+}
+
+void blinky_on_button_click(void)
+{
+    NRF_LOG_INFO("blinky_on_button_click");
+}
+
+void blinky_on_button_double_click(void)
+{
+    NRF_LOG_INFO("blinky_on_button_double_click");
+    g_play = !g_play;
+
+    if (g_timer_delay_idle)
+    {
+        if (g_play)
+        {
+            /* start playing during dalay event, "resume" delay timer */
+            blinky_resume_delay_timer();
+        }
+        else
+        {
+            /* stop playing during dalay event, "pause" delay timer */
+            blinky_pause_delay_timer();
+        }
+    }
+}
+
+void blinky_on_button_triple_click(void)
+{
+    NRF_LOG_INFO("blinky_on_button_triple_click");
+}
+
+void app_timer_delay_handler(void * p_context)
+{
+    app_timer_stop(g_timer_delay);
+    g_timer_delay_idle = false;
+}
+
+void blinky_go_to_next_node(queue_t* queue)
+{
+    NRF_LOG_INFO("blinky_go_to_next_node");
+    ASSERT(NULL != queue);
+    queue->queue_index++;
+    queue->queue_index %= queue->queue_size;
+
     node_t* next_node = &(queue->queue_states[queue->queue_index]);
-    switch(next_node->type)        
+    switch (next_node->type)        
     {
         case NODE_LED_STATE:
             next_node->data.led_data.need_play = true;
             break;
 
         case NODE_DELAY:
-            g_timer_idle = true;
-            ASSERT(NRF_SUCCESS == app_timer_start(g_timer_one, APP_TIMER_TICKS(next_node->data.delay), NULL));
+            g_timer_delay_idle = true;
+            ASSERT(NRF_SUCCESS == app_timer_start(g_timer_delay, APP_TIMER_TICKS(next_node->data.delay), queue));
+            
+            /*save global data to pause delay, cannot pass user data to button0_event_handler */
+            g_delay_time.time_current = next_node->data.delay;
+            g_delay_time.time_begin = app_timer_cnt_get();
             break;
 
         default:
@@ -130,7 +200,7 @@ void blinky_prepare_next_node(queue_t* queue)
 
 void blinky_play_sequence(queue_t* queue, bool play)
 {
-    ASSERT(queue != NULL);
+    ASSERT(NULL != queue);
 
     node_t* current_node = &(queue->queue_states[queue->queue_index]);
 
@@ -147,68 +217,64 @@ void blinky_play_sequence(queue_t* queue, bool play)
         if (blinky_soft_led_done(current_node->data.led_data.led_idx))
         {
             blinky_soft_led_off(current_node->data.led_data.led_idx);
-
-            queue->queue_index++;
-            queue->queue_index %= queue->queue_size;
-
-            blinky_prepare_next_node(queue);
+            blinky_go_to_next_node(queue);
         }
     }
 
     if (current_node->type == NODE_DELAY)
     {
-        if (!g_timer_idle)
+        if (!g_timer_delay_idle)
         {
-            queue->queue_index++;
-            queue->queue_index %= queue->queue_size;;
-
-            blinky_prepare_next_node(queue);
+            blinky_go_to_next_node(queue);
         }
     }
+}
+void blinky_init(queue_t* queue)
+{
+    ASSERT(NULL != queue);
+
+    /* Some trick to force app_timer work */
+    nrf_drv_clock_init();
+    nrf_drv_clock_lfclk_request(NULL);
+
+    /* Logs init */
+    ASSERT(NRF_SUCCESS == NRF_LOG_INIT(NULL));
+    NRF_LOG_DEFAULT_BACKENDS_INIT();
+
+    /* Leds init */
+    NRF_LOG_INFO("Leds init");
+    blinky_soft_leds_init();
+
+    /* Timers init */
+    NRF_LOG_INFO("Timers init");
+    ASSERT(NRF_SUCCESS == app_timer_init());
+    ASSERT(NRF_SUCCESS == app_timer_create(&g_timer_delay, APP_TIMER_MODE_SINGLE_SHOT, app_timer_delay_handler));
+
+    /* Buttons init */
+    NRF_LOG_INFO("Buttons init");
+    blinky_btns_init(blinky_on_button_click, blinky_on_button_double_click, blinky_on_button_triple_click);
+
+    /* App init */
+    NRF_LOG_INFO("App init");
+    blinky_array_init(queue);
 }
 
 /* Application main entry.*/
 int main(void)
-{
-    /* Configure board. */
-    bsp_board_init(BSP_INIT_NONE);
-
-    nrf_drv_clock_init();
-    nrf_drv_clock_lfclk_request(NULL);
-    
-    blinky_soft_leds_init();
-    
-    blinky_btn_init();
-
-    ASSERT(NRF_SUCCESS == app_timer_init());
-    ASSERT(NRF_SUCCESS == app_timer_create(&g_timer_one, APP_TIMER_MODE_SINGLE_SHOT, app_timer_timeout_handler));
-
-    g_timer_idle = false;
-
+{   
     queue_t queue = { 0 };
-    blinky_array_init(&queue);
-    
-    bool play = false;
-    
+
+    blinky_init(&queue);
+
+    /* Main loop */
+    NRF_LOG_INFO("Main loop go");
     while (true)
     {
-        blinky_soft_leds_loop(play);
-        blinky_play_sequence(&queue, play);
+        blinky_soft_leds_loop(g_play);
+        blinky_play_sequence(&queue, g_play);
 
-        if (BLINKY_BTN_ACTIVE_STATE == nrf_gpio_pin_read(BLINKY_BTN_0))
-        {
-            if(g_timer_idle)
-                app_timer_resume();
-
-            play = true;
-        }
-        else
-        {
-            if(g_timer_idle)
-                app_timer_pause();
-
-            play = false;
-        }
+        LOG_BACKEND_USB_PROCESS();
+        NRF_LOG_PROCESS();
     }
 
     return 0;
