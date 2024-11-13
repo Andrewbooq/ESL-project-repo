@@ -2,6 +2,7 @@
 #define BLINKY_ASSERT_H__
 
 #include "nrf_delay.h"
+#define UNUSED(expr) (void)(expr)
 
 /* ASSERT */
 #define BLINKY_LED_ASSERT_DELAY_MS  100

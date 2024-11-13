@@ -132,7 +132,9 @@ void blinky_pause_delay_timer(void)
 void blinky_resume_delay_timer(void)
 {
     NRF_LOG_INFO("resume time, left: %u ticks", g_delay_time.time_left);
-    ASSERT(NRF_SUCCESS == app_timer_start(g_timer_delay, g_delay_time.time_left, NULL));
+    ret_code_t res = app_timer_start(g_timer_delay, g_delay_time.time_left, NULL);
+    UNUSED(res);
+    ASSERT(NRF_SUCCESS == res);
     g_delay_time.time_begin = app_timer_cnt_get();
 }
 
@@ -183,18 +185,22 @@ void blinky_go_to_next_node(queue_t* queue)
     switch (next_node->type)        
     {
         case NODE_LED_STATE:
+        {
             next_node->data.led_data.need_play = true;
             break;
-
+        }
         case NODE_DELAY:
+        {
             g_timer_delay_idle = true;
-            ASSERT(NRF_SUCCESS == app_timer_start(g_timer_delay, APP_TIMER_TICKS(next_node->data.delay), queue));
+            ret_code_t res = app_timer_start(g_timer_delay, APP_TIMER_TICKS(next_node->data.delay), queue);
+            UNUSED(res);
+            ASSERT(NRF_SUCCESS == res);
             
             /*save global data to pause delay, cannot pass user data to button0_event_handler */
             g_delay_time.time_current = next_node->data.delay;
             g_delay_time.time_begin = app_timer_cnt_get();
             break;
-
+        }
         default:
         break;
     }
@@ -240,7 +246,9 @@ void blinky_init(queue_t* queue)
     nrf_drv_clock_lfclk_request(NULL);
 
     /* Logs init */
-    ASSERT(NRF_SUCCESS == NRF_LOG_INIT(NULL));
+    ret_code_t res = NRF_LOG_INIT(NULL);
+    UNUSED(res);
+    ASSERT(NRF_SUCCESS == res);
     NRF_LOG_DEFAULT_BACKENDS_INIT();
 
     /* Leds init */
@@ -249,8 +257,10 @@ void blinky_init(queue_t* queue)
 
     /* Timers init */
     NRF_LOG_INFO("Timers init");
-    ASSERT(NRF_SUCCESS == app_timer_init());
-    ASSERT(NRF_SUCCESS == app_timer_create(&g_timer_delay, APP_TIMER_MODE_SINGLE_SHOT, app_timer_delay_handler));
+    res = app_timer_init();
+    ASSERT(NRF_SUCCESS == res);
+    res = app_timer_create(&g_timer_delay, APP_TIMER_MODE_SINGLE_SHOT, app_timer_delay_handler);
+    ASSERT(NRF_SUCCESS == res);
 
     /* Buttons init */
     NRF_LOG_INFO("Buttons init");
