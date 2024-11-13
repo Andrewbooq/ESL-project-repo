@@ -1,9 +1,6 @@
 #ifndef BLINKY_BTN_H__
 #define BLINKY_BTN_H__
 
-#include "nrfx_gpiote.h"
-#include "app_timer.h"
-
 /* button clicks callback */
 typedef void (*click_cb_t)(void);
 
