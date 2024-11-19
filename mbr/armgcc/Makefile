@@ -6,6 +6,7 @@ DFU_PORT         ?= /dev/ttyACM0
 
 SDK_ROOT         ?= ../../../esl-nsdk
 PROJ_DIR         := ../..
+ESTC_USB_CLI_ENABLED ?= 1
 
 $(OUTPUT_DIRECTORY)/nrf52840_xxaa.out: \
   LINKER_SCRIPT  := blinky_gcc_nrf52.ld
@@ -38,6 +39,8 @@ SRC_FILES += \
   $(PROJ_DIR)/blinky_color.c \
   $(PROJ_DIR)/blinky_nvmc_driver.c \
   $(PROJ_DIR)/blinky_nvmc.c \
+  $(PROJ_DIR)/blinky_cdc_acm.c \
+  $(PROJ_DIR)/blinky_command.c \
   $(SDK_ROOT)/modules/nrfx/mdk/system_nrf52840.c \
   $(SDK_ROOT)/components/libraries/timer/app_timer2.c \
   $(SDK_ROOT)/components/libraries/timer/drv_rtc.c \
@@ -91,7 +94,7 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/libraries/sortlist \
   $(SDK_ROOT)/components/libraries/atomic_fifo \
   $(SDK_ROOT)/integration/nrfx/legacy \
-  $(SDK_ROOT)/modules/nrfx/drivers/include \
+  $(SDK_ROOT)/modules/nrfx/drivers \
   $(SDK_ROOT)/components/libraries/usbd \
   $(SDK_ROOT)/components/libraries/usbd/class/cdc/acm \
   $(SDK_ROOT)/components/libraries/usbd/class/cdc \
@@ -129,6 +132,7 @@ ifdef DEBUG
 $(info DEBUG MODE)
 CFLAGS += -DDEBUG_NRF
 endif
+CFLAGS += -DESTC_USB_CLI_ENABLED=$(ESTC_USB_CLI_ENABLED)
 
 
 
