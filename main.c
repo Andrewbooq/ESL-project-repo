@@ -1,32 +1,18 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <math.h>
-
-#include "nrf_log.h"
-#include "nrf_log_ctrl.h"
-#include "nrf_log_default_backends.h"
-#include "nrf_log_backend_usb.h"
-#include "app_usbd.h"
-#include "app_usbd_serial_num.h"
 
 #include "app_timer.h"
+//#include "nrf_drv_clock.h"
 
-#include "nrf_drv_clock.h"
-#include "nrfx_gpiote.h"
+#include "blinky_log.h"
 
 #include "blinky_led.h"
+#include "blinky_led_pwm.h"
+#include "blinky_led_soft.h"
+#include "blinky_color.h"
+
 #include "blinky_btn.h"
-#include "blinky_assert.h"
-
-#define BLINKY_LED_0        0
-#define BLINKY_LED_1        1
-#define BLINKY_LED_2        2
-#define BLINKY_LED_3        3
-
-
-#define BLINKY_LED_DELAY_MS                 1000
-#define BLINKY_CIRCLE_DELAY_MS              (BLINKY_LED_DELAY_MS * 3)
 
 /* stock number of a board (#ABCD) */
 #define BLINKY_SN_A         6
@@ -34,108 +20,110 @@
 #define BLINKY_SN_C         8
 #define BLINKY_SN_D         4
 
-typedef struct
-{
-    uint32_t time_begin;
-    uint32_t time_current;
-    uint32_t time_left;
+#define BLINKY_STATE_FAST_BLINK_MS  800
+#define BLINKY_STATE_SLOW_BLINK_MS  3000
 
-} delay_time_t;
+#define BLINKY_VELOCITY_MS          50 /* timeout between steps of moving through colors */
 
 typedef enum
-{ 
-    NODE_LED_STATE,
-    NODE_DELAY
-} node_type_t;
-
-typedef struct
 {
-    uint32_t led_idx; /* from 0 to BLINKY_LEDS_ON_BOARD */
-    bool need_play;
-} led_t;
+    T_VIEW,
+    T_EDIT_HUE,
+    T_EDIT_SATURATION,
+    T_EDIT_BRIGHTNESS,
+    T_COUNT
+} state_t;
 
-typedef union
+typedef struct 
 {
-    uint32_t delay;
-    led_t led_data;
-} node_data_t;
+    volatile state_t state;
+    volatile bool move_in_progress;
+    volatile bool move_s_up;
+    volatile bool move_v_up;
+    volatile hsv_t hsv;
+} data_t;
 
-typedef struct
+APP_TIMER_DEF(g_timer_move);
+
+static data_t g_data =
 {
-    node_type_t type;
-    node_data_t data;
-
-} node_t;
-
-typedef struct
-{
-    uint32_t queue_size;
-    node_t queue_states[ (BLINKY_SN_A * 2) + (BLINKY_SN_B * 2) + (BLINKY_SN_C * 2) + (BLINKY_SN_D * 2) + 1 ]; /* 2 = blink + delay after blink, 1 large delay at the end of queue*/
-    uint32_t queue_index;
- } queue_t;
-
-static volatile bool g_timer_delay_idle = false;
-static volatile bool g_play = false;
-
-APP_TIMER_DEF(g_timer_delay);
-
-static delay_time_t g_delay_time = { 0 };
-
-static void blinky_put_blink(queue_t* queue, uint32_t led_idx, uint32_t blink_repeat, uint32_t first_index)
-{
-    ASSERT(NULL != queue);
-
-    for (uint32_t i = 0; i < blink_repeat; ++i)
+    .state = T_VIEW,
+    .move_in_progress = false,
+    .move_s_up = false,
+    .move_v_up = false,
+    .hsv = 
     {
-        node_t* node = &(queue->queue_states[first_index++]);
-        node->type = NODE_LED_STATE;
-        node->data.led_data.need_play = true;
-        node->data.led_data.led_idx = led_idx;
-        
-        node = &(queue->queue_states[first_index++]);
-        node->type = NODE_DELAY;
-        node->data.delay = BLINKY_LED_DELAY_MS;
+        //DEVICE_ID=ABCD
+        //DEVICE_ID=6584
+        //Last digits: 84
+        //Hue: 84% => 360 * 0.84 = 302°
+        .h = ((BLINKY_SN_C * 10.f) + BLINKY_SN_D) / 100.f * 360.f,
+        .s = 100.f,
+        .v = 100.f
+    }
+};
+
+static char* blinky_state_to_str(state_t state)
+{
+    switch(state)
+    {
+        case T_VIEW:            return "VIEW";
+        case T_EDIT_HUE:        return "EDIT HUE";
+        case T_EDIT_SATURATION: return "EDIT SATURATION";
+        case T_EDIT_BRIGHTNESS: return "EDIT BRIGHTNESS";
+        case T_COUNT:           // fall-through
+        default:                return "UNKNOWN STATE";
     }
 }
 
-void blinky_array_init(queue_t* queue)
+static void blinky_state_to_led(state_t state)
 {
-    ASSERT(NULL != queue);
-
-    queue->queue_size = NRFX_ARRAY_SIZE(queue->queue_states);
-
-    blinky_put_blink(queue, BLINKY_LED_0, BLINKY_SN_A, 0);
-    blinky_put_blink(queue, BLINKY_LED_1, BLINKY_SN_B, (BLINKY_SN_A * 2));
-    blinky_put_blink(queue, BLINKY_LED_2, BLINKY_SN_C, (BLINKY_SN_A * 2) + (BLINKY_SN_B * 2));
-    blinky_put_blink(queue, BLINKY_LED_3, BLINKY_SN_D, (BLINKY_SN_A * 2) + (BLINKY_SN_B * 2) + (BLINKY_SN_C * 2));
-
-    /*large delay*/
-    node_t* node = &(queue->queue_states[queue->queue_size - 1]);
-    node->type = NODE_DELAY;
-    node->data.delay = BLINKY_CIRCLE_DELAY_MS;
+    switch(state)
+    {
+        case T_VIEW:
+            blinky_led_soft_off(BLINKY_LED_0);
+            break;
+        case T_EDIT_HUE:
+            blinky_led_soft_on(BLINKY_LED_0, BLINKY_STATE_SLOW_BLINK_MS);
+            break;
+        case T_EDIT_SATURATION:
+            blinky_led_soft_on(BLINKY_LED_0, BLINKY_STATE_FAST_BLINK_MS);
+            break;
+        case T_EDIT_BRIGHTNESS:
+            blinky_led_soft_off(BLINKY_LED_0);
+            blinky_led_pwm_set(BLINKY_LED_0, 100);
+            break;
+        case T_COUNT: // fall-through
+        default:
+            ASSERT(false);
+            break;
+    }
 }
 
-void blinky_pause_delay_timer(void)
+void blinky_on_button_hold(void)
 {
-    app_timer_stop(g_timer_delay);
-    uint32_t time_end = app_timer_cnt_get();
+    NRF_LOG_INFO("blinky_on_button_hold");
     
-    ASSERT(time_end > g_delay_time.time_begin);
-    uint32_t time_diff = app_timer_cnt_diff_compute(time_end, g_delay_time.time_begin);
-    
-    ASSERT( APP_TIMER_TICKS(g_delay_time.time_current) > time_diff);
-    g_delay_time.time_left = APP_TIMER_TICKS(g_delay_time.time_current) - time_diff;
-    
-    NRF_LOG_INFO("pause time, left: %u ticks", g_delay_time.time_left);
+    if(!g_data.move_in_progress)
+    {
+        NRF_LOG_INFO("blinky_on_button_hold: BLINKY_VELOCITY_MS = %u", BLINKY_VELOCITY_MS);
+
+        g_data.move_in_progress = true;
+        ret_code_t res = app_timer_start(g_timer_move, APP_TIMER_TICKS(BLINKY_VELOCITY_MS), NULL);
+        ASSERT(NRF_SUCCESS == res);
+    }
 }
 
-void blinky_resume_delay_timer(void)
+void blinky_on_button_release(void)
 {
-    NRF_LOG_INFO("resume time, left: %u ticks", g_delay_time.time_left);
-    ret_code_t res = app_timer_start(g_timer_delay, g_delay_time.time_left, NULL);
-    UNUSED(res);
+    NRF_LOG_INFO("blinky_on_button_release");
+
+    ret_code_t res = app_timer_stop(g_timer_move);
     ASSERT(NRF_SUCCESS == res);
-    g_delay_time.time_begin = app_timer_cnt_get();
+    
+    g_data.move_in_progress = false;
+
+    NRF_LOG_INFO("blinky_on_button_release: HSV: %d %d %d", g_data.hsv.h, g_data.hsv.s, g_data.hsv.v);
 }
 
 void blinky_on_button_click(void)
@@ -146,21 +134,11 @@ void blinky_on_button_click(void)
 void blinky_on_button_double_click(void)
 {
     NRF_LOG_INFO("blinky_on_button_double_click");
-    g_play = !g_play;
-
-    if (g_timer_delay_idle)
-    {
-        if (g_play)
-        {
-            /* start playing during dalay event, "resume" delay timer */
-            blinky_resume_delay_timer();
-        }
-        else
-        {
-            /* stop playing during dalay event, "pause" delay timer */
-            blinky_pause_delay_timer();
-        }
-    }
+    NRF_LOG_INFO("blinky_on_button_double_click: old state: %s", blinky_state_to_str(g_data.state));
+    g_data.state++;
+    g_data.state %= T_COUNT;
+    blinky_state_to_led(g_data.state);
+    NRF_LOG_INFO("blinky_on_button_double_click: new state: %s", blinky_state_to_str(g_data.state));
 }
 
 void blinky_on_button_triple_click(void)
@@ -168,122 +146,136 @@ void blinky_on_button_triple_click(void)
     NRF_LOG_INFO("blinky_on_button_triple_click");
 }
 
-void app_timer_delay_handler(void * p_context)
+void blinky_set_led_rgb(rgb_t* rgb)
 {
-    app_timer_stop(g_timer_delay);
-    g_timer_delay_idle = false;
+    ASSERT(NULL != rgb);
+    blinky_led_pwm_set(BLINKY_LED_R, rgb->r);
+    blinky_led_pwm_set(BLINKY_LED_G, rgb->g);
+    blinky_led_pwm_set(BLINKY_LED_B, rgb->b);
 }
 
-void blinky_go_to_next_node(queue_t* queue)
+void app_timer_move_handler(void * p_context)
 {
-    NRF_LOG_INFO("blinky_go_to_next_node");
-    ASSERT(NULL != queue);
-    queue->queue_index++;
-    queue->queue_index %= queue->queue_size;
-
-    node_t* next_node = &(queue->queue_states[queue->queue_index]);
-    switch (next_node->type)        
+    switch(g_data.state)
     {
-        case NODE_LED_STATE:
-        {
-            next_node->data.led_data.need_play = true;
-            break;
-        }
-        case NODE_DELAY:
-        {
-            g_timer_delay_idle = true;
-            ret_code_t res = app_timer_start(g_timer_delay, APP_TIMER_TICKS(next_node->data.delay), queue);
-            UNUSED(res);
-            ASSERT(NRF_SUCCESS == res);
-            
-            /*save global data to pause delay, cannot pass user data to button0_event_handler */
-            g_delay_time.time_current = next_node->data.delay;
-            g_delay_time.time_begin = app_timer_cnt_get();
-            break;
-        }
-        default:
+        case T_VIEW:
         break;
+    
+        case T_EDIT_HUE:
+            g_data.hsv.h += 1.f;
+            if (g_data.hsv.h > 360.f)
+            {
+                g_data.hsv.h = 0.f;
+            }
+            break;
+
+        case T_EDIT_SATURATION:
+            if (g_data.move_s_up)
+            {
+                g_data.hsv.s += 1.f;
+                if( g_data.hsv.s > 100.f)
+                {
+                    g_data.hsv.s = 100.f;
+                    g_data.move_s_up = false;
+                }
+            }
+            else
+            {
+                g_data.hsv.s -= 1.f;
+                if( g_data.hsv.s < 0.f)
+                {
+                    g_data.hsv.s = 0.f;
+                    g_data.move_s_up = true;
+                }
+            }
+            break;
+
+        case T_EDIT_BRIGHTNESS:
+        if (g_data.move_v_up)
+            {
+                g_data.hsv.v += 1.f;
+                if( g_data.hsv.v > 100.f)
+                {
+                    g_data.hsv.v = 100.f;
+                    g_data.move_v_up = false;
+                }
+            }
+            else
+            {
+                g_data.hsv.v -= 1.f;
+                if( g_data.hsv.v < 0.f)
+                {
+                    g_data.hsv.v = 0.f;
+                    g_data.move_v_up = true;
+                }
+            }
+            break;
+
+        case T_COUNT: // fall-through
+        default:
+            ASSERT(false);
+            break;
     }
+
+    rgb_t rgb = hsv2rgb(g_data.hsv);
+    blinky_set_led_rgb(&rgb);
 }
 
-void blinky_play_sequence(queue_t* queue, bool play)
+void blinky_init(void)
 {
-    ASSERT(NULL != queue);
-
-    node_t* current_node = &(queue->queue_states[queue->queue_index]);
-
-    if (play && current_node->type == NODE_LED_STATE)
-    {
-        // start blink playing
-        if (current_node->data.led_data.need_play)
-        {
-            blinky_soft_led_on(current_node->data.led_data.led_idx);
-            current_node->data.led_data.need_play = false;
-        }
-
-        // blink playing finished
-        if (blinky_soft_led_done(current_node->data.led_data.led_idx))
-        {
-            blinky_soft_led_off(current_node->data.led_data.led_idx);
-            blinky_go_to_next_node(queue);
-        }
-    }
-
-    if (current_node->type == NODE_DELAY)
-    {
-        if (!g_timer_delay_idle)
-        {
-            blinky_go_to_next_node(queue);
-        }
-    }
-}
-void blinky_init(queue_t* queue)
-{
-    ASSERT(NULL != queue);
-
     /* Some trick to force app_timer work */
-    nrf_drv_clock_init();
-    nrf_drv_clock_lfclk_request(NULL);
+    //nrf_drv_clock_init();
+    //nrf_drv_clock_lfclk_request(NULL);
 
     /* Logs init */
     ret_code_t res = NRF_LOG_INIT(NULL);
-    UNUSED(res);
+    UNUSED_VARIABLE(res);
     ASSERT(NRF_SUCCESS == res);
     NRF_LOG_DEFAULT_BACKENDS_INIT();
 
-    /* Leds init */
-    NRF_LOG_INFO("Leds init");
-    blinky_soft_leds_init();
+
 
     /* Timers init */
     NRF_LOG_INFO("Timers init");
     res = app_timer_init();
     ASSERT(NRF_SUCCESS == res);
-    res = app_timer_create(&g_timer_delay, APP_TIMER_MODE_SINGLE_SHOT, app_timer_delay_handler);
+    res = app_timer_create(&g_timer_move, APP_TIMER_MODE_REPEATED, app_timer_move_handler);
     ASSERT(NRF_SUCCESS == res);
+
+    /* Leds init */
+    NRF_LOG_INFO("Leds init");
+    blinky_led_soft_init();
 
     /* Buttons init */
     NRF_LOG_INFO("Buttons init");
-    blinky_btns_init(blinky_on_button_click, blinky_on_button_double_click, blinky_on_button_triple_click);
+    blinky_btns_init(   blinky_on_button_hold,
+                        blinky_on_button_release,   
+                        blinky_on_button_click,
+                        blinky_on_button_double_click,
+                        blinky_on_button_triple_click);
 
-    /* App init */
-    NRF_LOG_INFO("App init");
-    blinky_array_init(queue);
-}
+
+    /* Color init */
+    rgb_t rgb = hsv2rgb(g_data.hsv);
+    blinky_set_led_rgb(&rgb);
+ }
 
 /* Application main entry.*/
 int main(void)
 {   
-    queue_t queue = { 0 };
-
-    blinky_init(&queue);
+    blinky_init();
 
     /* Main loop */
     NRF_LOG_INFO("Main loop go");
     while (true)
     {
-        blinky_soft_leds_loop(g_play);
-        blinky_play_sequence(&queue, g_play);
+        
+#ifndef DEBUG_NRF
+        /* Wait for interrapt.
+        Incorrect log output in sleep mode */
+        __WFI();
+        
+#endif
 
         LOG_BACKEND_USB_PROCESS();
         NRF_LOG_PROCESS();
