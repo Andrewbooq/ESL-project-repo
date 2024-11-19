@@ -96,10 +96,10 @@ static void blinky_state_to_led(state_t state)
     }
 }
 
-void blinky_on_button_hold(void)
+void blinky_on_button_hold(void * p_context)
 {
     NRF_LOG_INFO("blinky_on_button_hold");
-    
+    UNUSED_VARIABLE(p_context);
 
     NRF_LOG_INFO("blinky_on_button_hold: BLINKY_VELOCITY_MS = %u", BLINKY_VELOCITY_MS);
 
@@ -107,9 +107,10 @@ void blinky_on_button_hold(void)
     ASSERT(NRF_SUCCESS == res);
 }
 
-void blinky_on_button_release(void)
+void blinky_on_button_release(void * p_context)
 {
     NRF_LOG_INFO("blinky_on_button_release");
+    UNUSED_VARIABLE(p_context);
 
     ret_code_t res = app_timer_stop(g_timer_move);
     ASSERT(NRF_SUCCESS == res);
@@ -117,24 +118,31 @@ void blinky_on_button_release(void)
     NRF_LOG_INFO("blinky_on_button_release: HSV: %d %d %d", g_data.hsv.h, g_data.hsv.s, g_data.hsv.v);
 }
 
-void blinky_on_button_click(void)
+void blinky_on_button_multi_click(void * p_context)
 {
-    NRF_LOG_INFO("blinky_on_button_click");
-}
+    NRF_LOG_INFO("blinky_on_button_multi_click");
+    ASSERT(NULL!= p_context);
+    uint32_t click_cnt = (uint32_t)p_context;
 
-void blinky_on_button_double_click(void)
-{
-    NRF_LOG_INFO("blinky_on_button_double_click");
-    NRF_LOG_INFO("blinky_on_button_double_click: old state: %s", blinky_state_to_str(g_data.state));
-    g_data.state++;
-    g_data.state %= T_COUNT;
-    blinky_state_to_led(g_data.state);
-    NRF_LOG_INFO("blinky_on_button_double_click: new state: %s", blinky_state_to_str(g_data.state));
-}
-
-void blinky_on_button_triple_click(void)
-{
-    NRF_LOG_INFO("blinky_on_button_triple_click");
+    switch (click_cnt)
+    {
+        case 1:
+            NRF_LOG_INFO("blinky_on_button_multi_click: Single click handling...");
+            break;
+        case 2:
+            NRF_LOG_INFO("blinky_on_button_multi_click: Double click handling...");
+            NRF_LOG_INFO("blinky_on_button_multi_click: old state: %s", blinky_state_to_str(g_data.state));
+            g_data.state++;
+            g_data.state %= T_COUNT;
+            blinky_state_to_led(g_data.state);
+            NRF_LOG_INFO("blinky_on_button_multi_click: new state: %s", blinky_state_to_str(g_data.state));
+            break;
+        case 3:
+            NRF_LOG_INFO("blinky_on_button_multi_click: Triple click handling...");
+            break;
+        default:
+            break;
+    }
 }
 
 void blinky_set_led_rgb(rgb_t* rgb)
@@ -145,6 +153,40 @@ void blinky_set_led_rgb(rgb_t* rgb)
     blinky_led_pwm_set(BLINKY_LED_B, rgb->b);
 }
 
+void blinky_360_run(volatile float* value)
+{
+    ASSERT(NULL != value);
+    *value += 1.f;
+    if (*value > 360.f)
+    {
+        *value = 0.f;
+    }
+}
+
+void blinky_100_run(volatile float* value, volatile bool* up)
+{
+    ASSERT(NULL != value);
+    ASSERT(NULL != up);
+    if (*up)
+    {
+        *value += 1.f;
+        if( *value > 100.f)
+        {
+            *value = 100.f;
+            *up = false;
+        }
+    }
+    else
+    {
+        *value -= 1.f;
+        if( *value < 0.f)
+        {
+            *value = 0.f;
+            *up = true;
+        }
+    }
+}
+
 void app_timer_move_handler(void * p_context)
 {
     switch(g_data.state)
@@ -153,53 +195,15 @@ void app_timer_move_handler(void * p_context)
         break;
     
         case T_EDIT_HUE:
-            g_data.hsv.h += 1.f;
-            if (g_data.hsv.h > 360.f)
-            {
-                g_data.hsv.h = 0.f;
-            }
+            blinky_360_run(&(g_data.hsv.h));
             break;
 
         case T_EDIT_SATURATION:
-            if (g_data.move_s_up)
-            {
-                g_data.hsv.s += 1.f;
-                if( g_data.hsv.s > 100.f)
-                {
-                    g_data.hsv.s = 100.f;
-                    g_data.move_s_up = false;
-                }
-            }
-            else
-            {
-                g_data.hsv.s -= 1.f;
-                if( g_data.hsv.s < 0.f)
-                {
-                    g_data.hsv.s = 0.f;
-                    g_data.move_s_up = true;
-                }
-            }
+            blinky_100_run(&(g_data.hsv.s), &(g_data.move_s_up));
             break;
 
         case T_EDIT_BRIGHTNESS:
-        if (g_data.move_v_up)
-            {
-                g_data.hsv.v += 1.f;
-                if( g_data.hsv.v > 100.f)
-                {
-                    g_data.hsv.v = 100.f;
-                    g_data.move_v_up = false;
-                }
-            }
-            else
-            {
-                g_data.hsv.v -= 1.f;
-                if( g_data.hsv.v < 0.f)
-                {
-                    g_data.hsv.v = 0.f;
-                    g_data.move_v_up = true;
-                }
-            }
+            blinky_100_run(&(g_data.hsv.v), &(g_data.move_v_up));
             break;
 
         case T_COUNT: // fall-through
@@ -220,8 +224,6 @@ void blinky_init(void)
     ASSERT(NRF_SUCCESS == res);
     NRF_LOG_DEFAULT_BACKENDS_INIT();
 
-
-
     /* Timers init */
     NRF_LOG_INFO("Timers init");
     res = app_timer_init();
@@ -235,12 +237,7 @@ void blinky_init(void)
 
     /* Buttons init */
     NRF_LOG_INFO("Buttons init");
-    blinky_btns_init(   blinky_on_button_hold,
-                        blinky_on_button_release,   
-                        blinky_on_button_click,
-                        blinky_on_button_double_click,
-                        blinky_on_button_triple_click);
-
+    blinky_btns_init(blinky_on_button_hold, blinky_on_button_release, blinky_on_button_multi_click);
 
     /* Color init */
     rgb_t rgb = hsv2rgb(g_data.hsv);

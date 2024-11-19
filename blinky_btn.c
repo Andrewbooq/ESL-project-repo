@@ -15,13 +15,11 @@ APP_TIMER_DEF(g_timer_multiclick);
 APP_TIMER_DEF(g_timer_hold);
 
 static volatile bool g_timer_multiclick_in_progress = false;
-static volatile uint8_t g_click_cnt = 0;
+static volatile uint32_t g_click_cnt = 0;
 
 static click_cb_t g_on_button_hold = NULL;
 static click_cb_t g_on_button_release = NULL;
-static click_cb_t g_on_button_click = NULL;
-static click_cb_t g_on_button_double_click = NULL;
-static click_cb_t g_on_button_triple_click = NULL;
+static click_cb_t g_on_button_multi_click = NULL;
 
 void button_click_handler(void)
 {
@@ -53,7 +51,7 @@ void button_release_handler(void)
     app_timer_stop(g_timer_hold);
     if (g_on_button_release)
     {
-        g_on_button_release();
+        g_on_button_release(NULL);
     }
 
     /* Make Click event as soon as user released the button as it implemented in most GUI */
@@ -74,30 +72,12 @@ void app_timer_debouncing_handler(void * p_context)
 
 void app_timer_multiclick_handler(void * p_context)
 {
-    switch (g_click_cnt)
-    {
-        case 1:
-            if (g_on_button_click)
-            {
-                g_on_button_click();
-            }
-            break;
-        case 2:
-            if (g_on_button_double_click)
-            {
-                g_on_button_double_click();
-            }
-            break;
-        case 3:
-            if (g_on_button_triple_click)
-            {
-                g_on_button_triple_click();
-            }
-            break;
-        default:
-            break;
-    }
+    UNUSED_VARIABLE(p_context);
 
+    if (g_on_button_multi_click)
+    {
+        g_on_button_multi_click((void*)g_click_cnt);
+    }
     g_timer_multiclick_in_progress = false;
     g_click_cnt = 0;
 }
@@ -106,7 +86,7 @@ void app_timer_hold_handler(void * p_context)
 {
     if (g_on_button_hold)
     {
-        g_on_button_hold();
+        g_on_button_hold(NULL);
     }
 }
 
@@ -117,13 +97,11 @@ void button0_event_handler(nrfx_gpiote_pin_t pin, nrf_gpiote_polarity_t action)
     ASSERT(NRF_SUCCESS == res);
 }
 
-void blinky_btns_init(click_cb_t on_hold, click_cb_t on_release, click_cb_t on_click, click_cb_t on_double_click, click_cb_t on_triple_click)
+void blinky_btns_init(click_cb_t on_hold, click_cb_t on_release, click_cb_t on_multi_click)
 {
     g_on_button_hold = on_hold;
     g_on_button_release = on_release;
-    g_on_button_click = on_click;
-    g_on_button_double_click = on_double_click;
-    g_on_button_triple_click = on_triple_click;
+    g_on_button_multi_click = on_multi_click;
 
     nrfx_err_t resx = nrfx_gpiote_init();
     ASSERT(NRFX_SUCCESS == resx);
