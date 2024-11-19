@@ -35,6 +35,7 @@ The nRF52840 Dongle is supported by nRF Connect for Desktop as well as programmi
 - A branch for a new workshop should have prefix feature/ and includes Workshop number (feature/WS4_pwm_and_double_click).
 - A branch for a bug fix should have prefix bug/ (bug/WS4_cover_debouncing_all_cases).
 - After brunch is done (all commits are pushed) it's necessary to Merge the branch to master over Pull Request.
+- **It's recommended to Merge the new branch after the Workshop is passed to a mentor**, because during passing some bugs/notes/fixes might appear.
 - After the branch is merged to master it's necessary to create a tag with name that is the same to the branch but without any prefix (WS4_pwm_and_double_click).
 
 ### Comments
