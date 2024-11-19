@@ -46,16 +46,16 @@ The nRF52840 Dongle is supported by nRF Connect for Desktop as well as programmi
   ```
   
 ## List of lectures
-### L01_Linux
-### L02_Compilation
-### L03_Git
-### L04_ARM
-### L05_Nordic_SDK
-### L06_GPIO
-### L07_IRQ_Logs
-### L08_Timers_PWM
-### L09_PWM_Driver
-### L10_NVMC
+- L01_Linux
+- L02_Compilation
+- L03_Git
+- L04_ARM
+- L05_Nordic_SDK
+- L06_GPIO
+- L07_IRQ_Logs
+- L08_Timers_PWM
+- L09_PWM_Driver
+- L10_NVMC
 
 ## Links
 
