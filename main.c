@@ -3,7 +3,6 @@
 #include <stdlib.h>
 
 #include "app_timer.h"
-//#include "nrf_drv_clock.h"
 
 #include "blinky_log.h"
 
@@ -14,7 +13,7 @@
 
 #include "blinky_btn.h"
 
-/* stock number of a board (#ABCD) */
+/* stock number of a board (DEVICE_ID=#ABCD) */
 #define BLINKY_SN_A         6
 #define BLINKY_SN_B         5
 #define BLINKY_SN_C         8
@@ -37,7 +36,6 @@ typedef enum
 typedef struct 
 {
     volatile state_t state;
-    volatile bool move_in_progress;
     volatile bool move_s_up;
     volatile bool move_v_up;
     volatile hsv_t hsv;
@@ -48,16 +46,14 @@ APP_TIMER_DEF(g_timer_move);
 static data_t g_data =
 {
     .state = T_VIEW,
-    .move_in_progress = false,
     .move_s_up = false,
     .move_v_up = false,
     .hsv = 
     {
-        //DEVICE_ID=ABCD
-        //DEVICE_ID=6584
-        //Last digits: 84
-        //Hue: 84% => 360 * 0.84 = 302°
-        .h = ((BLINKY_SN_C * 10.f) + BLINKY_SN_D) / 100.f * 360.f,
+        /* DEVICE_ID=6584
+           Last digits: 84
+           Hue: 84% => 360 * 0.84 = 302° */
+        .h = ((BLINKY_SN_C * 10.f) + BLINKY_SN_D)  * 360.f / 100.f,
         .s = 100.f,
         .v = 100.f
     }
@@ -104,14 +100,11 @@ void blinky_on_button_hold(void)
 {
     NRF_LOG_INFO("blinky_on_button_hold");
     
-    if(!g_data.move_in_progress)
-    {
-        NRF_LOG_INFO("blinky_on_button_hold: BLINKY_VELOCITY_MS = %u", BLINKY_VELOCITY_MS);
 
-        g_data.move_in_progress = true;
-        ret_code_t res = app_timer_start(g_timer_move, APP_TIMER_TICKS(BLINKY_VELOCITY_MS), NULL);
-        ASSERT(NRF_SUCCESS == res);
-    }
+    NRF_LOG_INFO("blinky_on_button_hold: BLINKY_VELOCITY_MS = %u", BLINKY_VELOCITY_MS);
+
+    ret_code_t res = app_timer_start(g_timer_move, APP_TIMER_TICKS(BLINKY_VELOCITY_MS), NULL);
+    ASSERT(NRF_SUCCESS == res);
 }
 
 void blinky_on_button_release(void)
@@ -120,8 +113,6 @@ void blinky_on_button_release(void)
 
     ret_code_t res = app_timer_stop(g_timer_move);
     ASSERT(NRF_SUCCESS == res);
-    
-    g_data.move_in_progress = false;
 
     NRF_LOG_INFO("blinky_on_button_release: HSV: %d %d %d", g_data.hsv.h, g_data.hsv.s, g_data.hsv.v);
 }
@@ -223,10 +214,6 @@ void app_timer_move_handler(void * p_context)
 
 void blinky_init(void)
 {
-    /* Some trick to force app_timer work */
-    //nrf_drv_clock_init();
-    //nrf_drv_clock_lfclk_request(NULL);
-
     /* Logs init */
     ret_code_t res = NRF_LOG_INIT(NULL);
     UNUSED_VARIABLE(res);

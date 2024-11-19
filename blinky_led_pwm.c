@@ -25,7 +25,6 @@ static nrf_pwm_sequence_t const g_seq =
 
 void blinky_led_pwm_init(void)
 {
-    blinky_leds_init();
     nrfx_pwm_config_t config = NRFX_PWM_DEFAULT_CONFIG;
     config.output_pins[0] = BLINKY_LED_0_PIN | NRFX_PWM_PIN_INVERTED; // channel 0
     config.output_pins[1] = BLINKY_LED_1_PIN | NRFX_PWM_PIN_INVERTED; // channel 1

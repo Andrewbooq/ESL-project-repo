@@ -3,6 +3,8 @@
 
 #ifdef BLINKY_LED_PWM_CONTROL
 #include "blinky_led_pwm.h"
+#define BLINKY_LED_ASSERT_ON_PER  100 /* %, duty cycle */
+#define BLINKY_LED_ASSERT_OFF_PER 0 /* %, duty cycle */
 #endif
 
 #define BLINKY_LED_ASSERT_DELAY_MS  100
@@ -11,13 +13,13 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * file_name)
 {
 #ifdef BLINKY_LED_PWM_CONTROL
 
-    blinky_led_pwm_set(BLINKY_LED_0, 0);
-    blinky_led_pwm_set(BLINKY_LED_1, 0);
-    blinky_led_pwm_set(BLINKY_LED_2, 0);
-    blinky_led_pwm_set(BLINKY_LED_3, 0);
+    blinky_led_pwm_set(BLINKY_LED_0, BLINKY_LED_ASSERT_OFF_PER);
+    blinky_led_pwm_set(BLINKY_LED_1, BLINKY_LED_ASSERT_OFF_PER);
+    blinky_led_pwm_set(BLINKY_LED_2, BLINKY_LED_ASSERT_OFF_PER);
+    blinky_led_pwm_set(BLINKY_LED_3, BLINKY_LED_ASSERT_OFF_PER);
 
-    blinky_led_pwm_set(BLINKY_LED_0, 100);
-    blinky_led_pwm_set(BLINKY_LED_1, 100);
+    blinky_led_pwm_set(BLINKY_LED_0, BLINKY_LED_ASSERT_ON_PER);
+    blinky_led_pwm_set(BLINKY_LED_1, BLINKY_LED_ASSERT_ON_PER);
     while (true)
     {}
 #else

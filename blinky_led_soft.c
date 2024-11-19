@@ -132,39 +132,16 @@ void blinky_led_soft_on(uint8_t led_idx , uint32_t blink_time_ms)
 void blinky_led_soft_off(uint8_t led_idx)
 {
     ASSERT(blinky_check_idx(led_idx));
-    
-    ret_code_t res = NRF_SUCCESS;
+
+    switch(led_idx)
+    {
+        case BLINKY_LED_0: app_timer_stop(g_timer_led0); break;
+        case BLINKY_LED_1: app_timer_stop(g_timer_led1); break;
+        case BLINKY_LED_2: app_timer_stop(g_timer_led2); break;
+        case BLINKY_LED_3: app_timer_stop(g_timer_led3); break;
+        default: ASSERT(false);                          break;
+    }
 
     g_blink_leds[led_idx].duty_cycle = 0;
     blinky_led_pwm_set(led_idx, 0);
-
-    switch (led_idx)
-    {
-        case BLINKY_LED_0:
-        {
-            res = app_timer_stop(g_timer_led0);
-            ASSERT(NRF_SUCCESS == res);
-            break;
-        }
-        case BLINKY_LED_1:
-        {
-            res = app_timer_stop(g_timer_led1);
-            ASSERT(NRF_SUCCESS == res);
-            break;
-        }
-        case BLINKY_LED_2:
-        {
-            res = app_timer_stop(g_timer_led2);
-            ASSERT(NRF_SUCCESS == res);
-            break;
-        }
-        case BLINKY_LED_3:
-        {
-            res = app_timer_stop(g_timer_led3);
-            ASSERT(NRF_SUCCESS == res);
-            break;
-        }
-        default:
-            break;
-    }
 }
