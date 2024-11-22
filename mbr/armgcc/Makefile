@@ -36,6 +36,7 @@ SRC_FILES += \
   $(PROJ_DIR)/blinky_btn.c \
   $(PROJ_DIR)/blinky_assert.c \
   $(PROJ_DIR)/blinky_color.c \
+  $(PROJ_DIR)/blinky_nvmc.c \
   $(SDK_ROOT)/modules/nrfx/mdk/system_nrf52840.c \
   $(SDK_ROOT)/components/libraries/timer/app_timer2.c \
   $(SDK_ROOT)/components/libraries/timer/drv_rtc.c \
@@ -57,6 +58,7 @@ SRC_FILES += \
   $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_power.c \
   $(SDK_ROOT)/components/libraries/usbd/app_usbd_string_desc.c \
   $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_pwm.c \
+  $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_nvmc.c \
 
 # Include folders common to all targets
 INC_FOLDERS += \
@@ -93,6 +95,8 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/libraries/usbd/class/cdc/acm \
   $(SDK_ROOT)/components/libraries/usbd/class/cdc \
   $(SDK_ROOT)/external/utf_converter \
+  $(SDK_ROOT)/components/libraries/bootloader \
+  $(SDK_ROOT)/components/libraries/bootloader/dfu \
 
 # Libraries common to all targets
 LIB_FILES += \

@@ -10,6 +10,7 @@
 #include "blinky_led_pwm.h"
 #include "blinky_led_soft.h"
 #include "blinky_color.h"
+#include "blinky_nvmc.h"
 
 #include "blinky_btn.h"
 
@@ -58,6 +59,8 @@ static data_t g_data =
         .v = 100.f
     }
 };
+
+STATIC_ASSERT(sizeof(g_data.hsv) % sizeof(uint32_t) == 0, "struct must be aligned to 32 bit word");
 
 static char* blinky_state_to_str(state_t state)
 {
@@ -127,8 +130,17 @@ void blinky_on_button_multi_click(void * p_context)
     switch (click_cnt)
     {
         case 1:
+        {
             NRF_LOG_INFO("blinky_on_button_multi_click: Single click handling...");
+            NRF_LOG_INFO("blinky_on_button_multi_click: blinky_nvmc_test");
+            //blinky_nvmc_test((uint32_t*)&(g_data.hsv), sizeof(g_data.hsv)/sizeof(uint32_t));
+            test_t data = { 0 };
+            uint32_t read = blinky_nvmc_read_last_data((uint32_t*)&data, sizeof(data));
+            NRF_LOG_INFO("blinky_on_button_multi_click: blinky_nvmc_get_last_data read %u bytes", read);
+            NRF_LOG_INFO("blinky_on_button_multi_click: data a=0x%x, b=0x%x, c=0x%x, d=0x%x", data.a, data.b, data.c, data.d);
+            NRF_LOG_INFO("blinky_on_button_multi_click: data pi=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(data.pi));
             break;
+        }
         case 2:
             NRF_LOG_INFO("blinky_on_button_multi_click: Double click handling...");
             NRF_LOG_INFO("blinky_on_button_multi_click: old state: %s", blinky_state_to_str(g_data.state));
@@ -239,9 +251,14 @@ void blinky_init(void)
     NRF_LOG_INFO("Buttons init");
     blinky_btns_init(blinky_on_button_hold, blinky_on_button_release, blinky_on_button_multi_click);
 
-    /* Color init */
+    /* Color init defaults */
+    NRF_LOG_INFO("Color init defaults");
     rgb_t rgb = hsv2rgb(g_data.hsv);
     blinky_set_led_rgb(&rgb);
+
+    /* NVMC init */
+    NRF_LOG_INFO("NVMC init");
+    //blinky_nvmc_init();
  }
 
 /* Application main entry.*/
@@ -253,16 +270,14 @@ int main(void)
     NRF_LOG_INFO("Main loop go");
     while (true)
     {
-        
+        LOG_BACKEND_USB_PROCESS();
+        NRF_LOG_PROCESS();
+
 #ifndef DEBUG_NRF
         /* Wait for interrapt.
         Incorrect log output in sleep mode */
         __WFI();
-        
 #endif
-
-        LOG_BACKEND_USB_PROCESS();
-        NRF_LOG_PROCESS();
     }
 
     return 0;
