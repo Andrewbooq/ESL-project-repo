@@ -31,9 +31,12 @@ SRC_FILES += \
   $(SDK_ROOT)/modules/nrfx/soc/nrfx_atomic.c \
   $(PROJ_DIR)/main.c \
   $(PROJ_DIR)/blinky_led.c \
+  $(PROJ_DIR)/blinky_led_pwm.c \
+  $(PROJ_DIR)/blinky_led_soft.c \
   $(PROJ_DIR)/blinky_btn.c \
+  $(PROJ_DIR)/blinky_assert.c \
+  $(PROJ_DIR)/blinky_color.c \
   $(SDK_ROOT)/modules/nrfx/mdk/system_nrf52840.c \
-  $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_systick.c \
   $(SDK_ROOT)/components/libraries/timer/app_timer2.c \
   $(SDK_ROOT)/components/libraries/timer/drv_rtc.c \
   $(SDK_ROOT)/components/libraries/sortlist/nrf_sortlist.c \
@@ -53,6 +56,7 @@ SRC_FILES += \
   $(SDK_ROOT)/components/libraries/usbd/app_usbd_core.c \
   $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_power.c \
   $(SDK_ROOT)/components/libraries/usbd/app_usbd_string_desc.c \
+  $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_pwm.c \
 
 # Include folders common to all targets
 INC_FOLDERS += \

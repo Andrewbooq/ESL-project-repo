@@ -127,4 +127,8 @@
 
 // </e>
 
+#ifndef BLINKY_LED_PWM_CONTROL
+#define BLINKY_LED_PWM_CONTROL 1
+#endif
+
 #endif
