@@ -1,4 +1,5 @@
 #include "nrf_delay.h"
+
 #include "blinky_led.h"
 #include "blinky_log.h"
 
@@ -8,17 +9,13 @@
 #define BLINKY_LED_ASSERT_OFF_PER 0 /* %, duty cycle */
 #endif
 
-#define S1(x) #x
-#define S2(x) S1(x)
-#define LOCATION __FILE__ " : " S2(__LINE__)
-
 #define BLINKY_LED_ASSERT_DELAY_MS  100
 
 void assert_nrf_callback(uint16_t line_num, const uint8_t * file_name)
 {
+    NRF_LOG_INFO("ASSERT handler: file_name=%s, line_num=%u", file_name, line_num);
 #ifdef BLINKY_LED_PWM_CONTROL
-    NRF_LOG_INFO(LOCATION);
-
+    
     blinky_led_pwm_set(BLINKY_LED_0, BLINKY_LED_ASSERT_OFF_PER);
     blinky_led_pwm_set(BLINKY_LED_1, BLINKY_LED_ASSERT_OFF_PER);
     blinky_led_pwm_set(BLINKY_LED_2, BLINKY_LED_ASSERT_OFF_PER);

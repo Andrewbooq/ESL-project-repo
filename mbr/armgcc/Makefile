@@ -36,6 +36,7 @@ SRC_FILES += \
   $(PROJ_DIR)/blinky_btn.c \
   $(PROJ_DIR)/blinky_assert.c \
   $(PROJ_DIR)/blinky_color.c \
+  $(PROJ_DIR)/blinky_nvmc_driver.c \
   $(PROJ_DIR)/blinky_nvmc.c \
   $(SDK_ROOT)/modules/nrfx/mdk/system_nrf52840.c \
   $(SDK_ROOT)/components/libraries/timer/app_timer2.c \
@@ -189,7 +190,7 @@ $(foreach target, $(TARGETS), $(call define_target, $(target)))
 .PHONY: dfu
 
 dfu_package: $(DFU_PACKAGE)
-
+#	   --softdevice $(SDK_ROOT)/components/softdevice/s113/hex/s113_nrf52_7.2.0_softdevice.hex $@
 $(DFU_PACKAGE): $(OUTPUT_DIRECTORY)/nrf52840_xxaa.hex
 	@echo Creating DFU package: $(DFU_PACKAGE)
 	nrfutil pkg generate \

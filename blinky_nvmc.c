@@ -3,256 +3,195 @@
 #include "nrf_dfu_types.h"
 
 #include "blinky_nvmc.h"
+#include "blinky_nvmc_driver.h"
 #include "blinky_log.h"
 
-#define BLINKY_UINT32_SIZE (sizeof(uint32_t))
-static test_t test = 
-{
-    .a = 0x010307F,
-    .b = 0xAABBCCDD,
-    .c = 0xDEADBEEF,
-    .d = 0xFF,
-    .pi = 3.14159265
-};
+/* Didn't find how to get the BOOTLOADER_START_ADDR from SDK correctly */
+#define BLINKY_BOOTLOADER_START_ADDR    (0xE0000)
+#define BLINKY_PAGE_SIZE                (0x1000)
 
-STATIC_ASSERT(sizeof(test) % BLINKY_UINT32_SIZE == 0, "struct must be aligned to 32 bit word");
+#define BLINKY_APP_AREA_BEGIN_ADDR      (BLINKY_BOOTLOADER_START_ADDR - NRF_DFU_APP_DATA_AREA_SIZE)
 
-//CRITICAL_REGION_ENTER();
-//CRITICAL_REGION_EXIT();
+#define BLINKY_EMPTY_VALUE              0xFFFFFFFF
+#define BLINKY_WORD_SIZE                (sizeof(uint32_t))
 
-#define BLINKY_APP_AREA_BEGIN_ADDR  (BOOTLOADER_START_ADDR - NRF_DFU_APP_DATA_AREA_SIZE)
-#define BLINKY_APP_AREA_END_ADDR    (BOOTLOADER_START_ADDR - 1)
-#define BLINKY_MAX_WRITABLE_SIZE    24 /* bytes */
-#define BLINKY_EMPTY_VALUE          0xFFFFFFFF
+#define BLINKY_PAGE0_BEGIN              BLINKY_APP_AREA_BEGIN_ADDR
+#define BLINKY_PAGE1_BEGIN              (BLINKY_PAGE0_BEGIN + BLINKY_PAGE_SIZE)
 
+bool g_need_to_erase_page0 = false;
 uint32_t* g_last_addr = NULL;
+uint32_t g_writable_block_size = 0;
 
-uint32_t blinky_read_header(uint32_t* addr)
+static bool blinky_find_last_addr(uint32_t* result)
 {
-    NRF_LOG_INFO("blinky_read_header: read addr 0x%x", (uint32_t)addr);
+    uint32_t* addr = (uint32_t*)BLINKY_PAGE0_BEGIN;
+    uint32_t* last_addr = 0;
 
-    ASSERT((uint32_t)addr >= BLINKY_APP_AREA_BEGIN_ADDR && (uint32_t)addr <= BLINKY_APP_AREA_END_ADDR);
-
-    uint32_t header = *addr;
-
-    return header;
-}
-
-void blinky_read_block(uint32_t* addr, uint32_t* payload, uint32_t count)
-{
-    NRF_LOG_INFO("blinky_read_block: read addr = 0x%x, payload addr = 0x%x, count = %u", (uint32_t)addr, (uint32_t)payload, count);
-    
-    ASSERT((uint32_t)addr >= BLINKY_APP_AREA_BEGIN_ADDR && (uint32_t)addr <= BLINKY_APP_AREA_END_ADDR);
-
-    for (uint32_t i = 0; i < count; ++i)
+    for (int i = 0 ;  ; ++i)
     {
-        *payload = *addr;
-        addr++;
-        payload++;
+        NRF_LOG_INFO("NVMC: blinky_find_last_addr: check addr=0x%x", addr);
+        uint32_t header = 0;
+        blinky_read_block(addr, &header, 1);
+        NRF_LOG_INFO("NVMC: blinky_find_last_addr: header=%u", header);
+        if ((header == BLINKY_EMPTY_VALUE))
+        {
+            if (i == 0)
+            {
+                // there is no header in memory
+                NRF_LOG_INFO("NVMC: blinky_find_last_addr: empty memory");
+                return false;
+            }
+            // the previous block was the last correct
+            NRF_LOG_INFO("NVMC: blinky_find_last_addr: the previous block was the last correct");
+            *result = (uint32_t)last_addr;
+            return true;
+        }
+
+        last_addr = addr;
+        addr++;           /* header */
+        addr += (header / BLINKY_WORD_SIZE);   /* data */
+
+        if ((uint32_t)addr > BLINKY_PAGE1_BEGIN)
+        {
+            NRF_LOG_INFO("NVMC: blinky_find_last_addr: end of page, mark page 0 to erase");
+            g_need_to_erase_page0 = true;
+            break;
+        }
     }
+    return false;
 }
 
-bool blinky_block_writable_check(uint32_t* addr, uint32_t* payload, uint32_t count)
+void blinky_nvmc_init(uint32_t writable_block_size)
 {
-    bool writable = false;
-    NRF_LOG_INFO("blinky_block_writable_check: begin addr for writing 0x%x", addr);
+    ASSERT(writable_block_size > 0);
 
-    /* Header */
-    /* Write payload size in bytes to be compatible with common rules */
-    uint32_t header = count * sizeof(uint32_t);
-    
-    NRF_LOG_INFO("blinky_block_writable_check: check writable header data, addr=0x%x, value=%u", (uint32_t)addr, header);
-    if(nrfx_nvmc_word_writable_check((uint32_t)addr, header))
-    {
-        writable = true;
-        NRF_LOG_INFO("blinky_block_writable_check: header data is writable");
-    }
-    addr++;
+    g_writable_block_size = writable_block_size;
 
-    for (uint32_t i = 0; i < count; ++i)
-    {   
-        NRF_LOG_INFO("blinky_block_writable_check: payload data, addr=0x%x, value=0x%x", (uint32_t)addr, *payload);
-        if(nrfx_nvmc_word_writable_check((uint32_t)addr, *payload))
-        {
-            writable = writable ? true : false;
-            NRF_LOG_INFO("blinky_block_writable_check: payload data is writable");
-        }
-        else
-        {
-            writable = false;
-            NRF_LOG_INFO("blinky_block_writable_check: payload data is NOT writable");
-        }
-        addr++;
-        payload++;
-    }
-
-    return writable;
- }
-
-void blinky_block_write(uint32_t* addr, uint32_t* payload, uint32_t count)
-{
-    NRF_LOG_INFO("blinky_block_write: begin addr for writing 0x%x", addr);
-
-    /* Header */
-    /* Write payload size in bytes to be compatible with common rules */
-    uint32_t header = count * sizeof(uint32_t);
-    
-    NRF_LOG_INFO("blinky_block_write: writing header data, addr=0x%x, value=%u", (uint32_t)addr, header);
-    nrfx_nvmc_word_write((uint32_t)addr, header);
-    
-    addr++;
-
-    for (uint32_t i = 0; i < count; ++i)
-    {   
-        NRF_LOG_INFO("blinky_block_write: writing payload data, addr=0x%x, value=0x%x", (uint32_t)addr, *payload);
-        nrfx_nvmc_word_write((uint32_t)addr, *payload);
-
-        addr++;
-        payload++;
-    }
-}
-
-void blinky_nvmc_init(void)
-{
-    NRF_LOG_INFO("blinky_nvmc_init");
-    NRF_LOG_INFO("blinky_nvmc_init: initialize g_last_addr to first byte of first page");
-    uint32_t* g_last_addr = (uint32_t*)BLINKY_APP_AREA_BEGIN_ADDR;
-    NRF_LOG_INFO("blinky_nvmc_init: g_last_addr=%u", g_last_addr);
+    NRF_LOG_INFO("NVMC: blinky_nvmc_init: initialize g_last_addr to first byte of first page");
+    NRF_LOG_INFO("NVMC: blinky_nvmc_init: BLINKY_BOOTLOADER_START_ADDR=0x%x", BLINKY_BOOTLOADER_START_ADDR);
+    NRF_LOG_INFO("NVMC: blinky_nvmc_init: NRF_DFU_APP_DATA_AREA_SIZE=0x%x", NRF_DFU_APP_DATA_AREA_SIZE);
+    NRF_LOG_INFO("NVMC: blinky_nvmc_init: BLINKY_APP_AREA_BEGIN_ADDR=0x%x", BLINKY_APP_AREA_BEGIN_ADDR);
+    NRF_LOG_INFO("NVMC: blinky_nvmc_init: g_writable_block_size=%u", g_writable_block_size);
+    g_last_addr = (uint32_t*)BLINKY_APP_AREA_BEGIN_ADDR;
+    NRF_LOG_INFO("NVMC: blinky_nvmc_init: g_last_addr=0x%x", g_last_addr);
 }
 
 uint32_t blinky_nvmc_read_last_data(uint32_t* data, uint32_t size)
 {
-    NRF_LOG_INFO("blinky_nvmc_read_last_data: data addr=0x%x, size=%u", (uint32_t)data, size);
+    NRF_LOG_INFO("NVMC: blinky_nvmc_read_last_data: data addr=0x%x, size=%u", (uint32_t)data, size);
 
     ASSERT(NULL != data);
-    ASSERT(size > 0);
+    ASSERT(size == g_writable_block_size);
+    
+    uint32_t result = 0;
+    bool found = blinky_find_last_addr(&result);
 
-    if( size % BLINKY_UINT32_SIZE != 0)
+    if(!found)
     {
-        NRF_LOG_INFO("blinky_nvmc_read_last_data: invalid parameter");
+        NRF_LOG_INFO("NVMC: blinky_nvmc_read_last_data: wrong data in memory");
         return 0;
     }
 
-    /* Read header */
-    uint32_t block_size = blinky_read_header(g_last_addr);
-    NRF_LOG_INFO("blinky_nvmc_read_last_data: blinky_read_header=%u", block_size);
+    uint32_t* addr = (uint32_t*)result;
 
-    if(block_size != size || (block_size > BLINKY_MAX_WRITABLE_SIZE) || (block_size % BLINKY_UINT32_SIZE != 0))
+
+    uint32_t block_size = 0;
+    blinky_read_block(addr, &block_size, 1);
+    NRF_LOG_INFO("NVMC: blinky_nvmc_read_last_data: blinky_read_header=%u", block_size);
+
+    if(block_size != g_writable_block_size)
     {
-        NRF_LOG_INFO("blinky_nvmc_read_last_data: header value is wrong, does not correspond count");
-        // Invalid value read, need to clean the page
-        // TODO: call nrfx_nvmc_page_erase
+        NRF_LOG_INFO("NVMC: blinky_nvmc_read_last_data: invalid header value");
+        // Invalid value, need to clean the page
+        // Reading function: don't write or erase here
+        // So, just mark the page for erasing
+        g_need_to_erase_page0 = true;
         return 0;
     }
-
-    if (block_size == BLINKY_EMPTY_VALUE)
-    {
-        NRF_LOG_INFO("blinky_nvmc_read_last_data: read memory is empty");
-        // No data in memory
-        return 0;
-    }
-
+    g_last_addr = addr;
     /* Header looks good, continue */
     g_last_addr++;
     
     /* Read data, skeep header */
-    uint32_t count = size / BLINKY_UINT32_SIZE;
-    blinky_read_block(g_last_addr, data, count);
-    g_last_addr += block_size;
+    uint32_t word_cnt = size / BLINKY_WORD_SIZE;
+    blinky_read_block(g_last_addr, data, word_cnt);
+    g_last_addr += word_cnt;
 
     return block_size;
 }
 
-void blinky_nvmc_test(uint32_t* array, uint32_t count)
+bool blinky_nvmc_write_data(uint32_t* data, uint32_t size)
 {
-    NRF_LOG_INFO("blinky_nvmc_test: array=0x%x, count=%u", (uint32_t)array, count);
-    NRF_LOG_INFO("blinky_nvmc_test: don't passed data so far\n\n\n");
+    NRF_LOG_INFO("NVMC: blinky_nvmc_write_data: data=0x%x, size=%u", (uint32_t)data, size);
 
-    blinky_nvmc_init();
+    ASSERT(NULL != data);
+    ASSERT(size == g_writable_block_size);
 
-//    /* Erase page */
-//    nrfx_err_t resx = nrfx_nvmc_page_erase(BLINKY_APP_AREA_BEGIN_ADDR);
-//    NRF_LOG_INFO("blinky_nvmc_test: nrfx_nvmc_page_erase returned %u", resx);
-
-//    /* Writing */
-//    uint32_t* payload_test = (uint32_t*)&test;
-//    uint32_t count_test = sizeof(test) / sizeof(uint32_t);
-//
-//    if (true == blinky_block_writeble_check(addr_test, payload_test, count_test))
-//    {
-//        NRF_LOG_INFO("blinky_nvmc_test: blinky_block_writeble_check passed, able to write");
-//        blinky_block_write(addr_test, payload_test, count_test);
-//    }
-//    
-//    /* Waititng for complete writing */
-//    while (!nrfx_nvmc_write_done_check())
-//    {}
-//    NRF_LOG_INFO("blinky_nvmc_test: writing complete");
-    
-
-
-/*
-
-    uint32_t flash_page_size = nrfx_nvmc_flash_page_size_get();
-    NRF_LOG_INFO("blinky_nvmc_test: flash_page_size %u bytes", flash_page_size);
-
-    //initial erase whole app area
-    //blinky_erase_page(BLINKY_APP_AREA_BEGIN_ADDR);
-    //blinky_erase_page(BLINKY_APP_AREA_BEGIN_ADDR+flash_page_size);
-    //blinky_erase_page(BLINKY_APP_AREA_BEGIN_ADDR+flash_page_size+flash_page_size);
-
-
-    return;
-
-    uint32_t flash_size = nrfx_nvmc_flash_size_get();
-    NRF_LOG_INFO("blinky_nvmc_test: flash_size %u bytes", flash_size);
-
-    uint32_t flash_page_cnt = nrfx_nvmc_flash_page_count_get();
-    NRF_LOG_INFO("blinky_nvmc_test: flash_page_cnt %u", flash_page_cnt);
-    
-    NRF_LOG_INFO("blinky_nvmc_test: BOOTLOADER_START_ADDR %u", BOOTLOADER_START_ADDR);
-    NRF_LOG_INFO("blinky_nvmc_test: NRF_DFU_APP_DATA_AREA_SIZE %u", NRF_DFU_APP_DATA_AREA_SIZE);
-    
-    uint32_t app_area_begin_addr = BOOTLOADER_START_ADDR - NRF_DFU_APP_DATA_AREA_SIZE;
-    uint32_t app_area_end_addr = BOOTLOADER_START_ADDR - 1;
-
-    NRF_LOG_INFO("blinky_nvmc_test: app_area_begin_addr 0x%x", app_area_begin_addr);
-    NRF_LOG_INFO("blinky_nvmc_test: app_area_begin_end 0x%x", app_area_end_addr);
-    uint32_t cnt = 5;
-    for (uint32_t addr = app_area_end_addr; addr >= app_area_begin_addr; addr--)
+    if (g_need_to_erase_page0)
     {
-        uint32_t* readaddr = (uint32_t*)addr;
-        NRF_LOG_INFO("blinky_nvmc_test: readaddr %u", *readaddr);
-        
-        cnt--;
-        if (cnt == 0)
-            break;
+        NRF_LOG_INFO("NVMC: blinky_nvmc_write_data: Page number 0 is marked to erase, clean it");
+
+        g_last_addr = (uint32_t*)BLINKY_PAGE0_BEGIN;
+        nrfx_err_t resx = blinky_nvmc_erase_page((uint32_t*)BLINKY_PAGE0_BEGIN);
+        if (NRFX_SUCCESS != resx)
+        {
+            NRF_LOG_INFO("NVMC: blinky_nvmc_write_data: Cannot erase page 0, nrfx_err_t=%d", resx);
+            return false;
+        }
+        g_need_to_erase_page0 = false;
     }
 
-    //nrfx_nvmc_word_writable_check
-*/
-/*
-<info> app: blinky_nvmc_test: flash_size 1048576 bytes
-<info> app: blinky_nvmc_test: flash_page_size 4096 bytes
-<info> app: blinky_nvmc_test: flash_page_cnt 256
-<info> app: blinky_nvmc_test: BOOTLOADER_START_ADDR 114688
-<info> app: blinky_nvmc_test: NRF_DFU_APP_DATA_AREA_SIZE 12288
+    /* Check if the data fit free space */
+    uint32_t free_space = BLINKY_PAGE1_BEGIN - (uint32_t)g_last_addr;
+    NRF_LOG_INFO("NVMC: blinky_nvmc_write_data: free_space=%u", free_space);
+    if (free_space < (size + BLINKY_WORD_SIZE))
+    {
+        NRF_LOG_INFO("NVMC: blinky_nvmc_write_data: Not enought free space, erase page 0");
+        
+        g_last_addr = (uint32_t*)BLINKY_PAGE0_BEGIN;
+        nrfx_err_t resx = blinky_nvmc_erase_page((uint32_t*)BLINKY_PAGE0_BEGIN);
+        if (NRFX_SUCCESS != resx)
+        {
+            NRF_LOG_INFO("NVMC: blinky_nvmc_write_data: Cannot erase page 0, nrfx_err_t=%d", resx);
+            return false;
+        }
+    }
 
-*/
+    /* Check Header */
+    if (!blinky_block_writable_check(g_last_addr, &size, 1))
+    {
+        NRF_LOG_INFO("NVMC: blinky_nvmc_write_data: Header is not writable");
+        return false;
+    }
 
-/*
-    nrfx_err_t resx = nrfx_nvmc_page_erase(0);
-    ASSERT(NRFX_SUCCESS == resx);
+    /* Check Data */
+    uint32_t block_size = size / BLINKY_WORD_SIZE;
+    if (!blinky_block_writable_check(g_last_addr + 1, data, block_size))
+    {
+        NRF_LOG_INFO("NVMC: blinky_nvmc_write_data: Data is not writable");
+        return false;
+    }
 
-    bool res = nrfx_nvmc_word_writable_check(0, 0);
-    ASSERT(true == res);
+    /* Write Header */
+    NRF_LOG_INFO("NVMC: blinky_nvmc_write_data: Able to write, writing");
+    blinky_block_write(g_last_addr, &size, 1);
+    
+    g_last_addr++;
 
-    nrfx_nvmc_word_write(0, 0);
+    /* Write Data */
+    blinky_block_write(g_last_addr, data, block_size);
+ 
+    g_last_addr += block_size;
 
-    res = nrfx_nvmc_write_done_check();
-    while (!res)
+    // TODO: move waiting out of the module because it blocks the code until the writing complete
+    /* Waititng for complete writing */
+    while (!nrfx_nvmc_write_done_check())
     {}
-*/
-    //NRF_DFU_APP_DATA_AREA_SIZE
-    //BOOTLOADER_START_ADDR
+    NRF_LOG_INFO("NVMC: blinky_nvmc_write_data: writing complete");
+    return true;
+}
+
+bool blinky_nvmc_write_done_check()
+{
+    return blinky_driver_write_done_check();
 }

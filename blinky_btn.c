@@ -23,7 +23,7 @@ static click_cb_t g_on_button_multi_click = NULL;
 
 void button_click_handler(void)
 {
-    NRF_LOG_INFO("button_click_handler");
+    NRF_LOG_INFO("BTN: button_click_handler");
     g_click_cnt++;
     if (g_timer_multiclick_in_progress)
     {
@@ -73,7 +73,7 @@ void app_timer_debouncing_handler(void * p_context)
 
 void app_timer_multiclick_handler(void * p_context)
 {
-    NRF_LOG_INFO("app_timer_multiclick_handler");
+    NRF_LOG_INFO("BTN: app_timer_multiclick_handler");
     UNUSED_VARIABLE(p_context);
 
     if (g_on_button_multi_click)
@@ -86,7 +86,7 @@ void app_timer_multiclick_handler(void * p_context)
 
 void app_timer_hold_handler(void * p_context)
 {
-    NRF_LOG_INFO("app_timer_hold_handler");
+    NRF_LOG_INFO("BTN: app_timer_hold_handler");
     if (g_on_button_hold)
     {
         g_on_button_hold(NULL);
