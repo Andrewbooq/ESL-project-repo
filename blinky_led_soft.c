@@ -84,11 +84,21 @@ void blinky_led_soft_on(uint8_t led_idx , uint32_t blink_time_ms)
     /* First stop timer to reconfig blinking parameters */  
     switch(led_idx)
     {
-        case BLINKY_LED_0: app_timer_stop(g_timer_led0); break;
-        case BLINKY_LED_1: app_timer_stop(g_timer_led1); break;
-        case BLINKY_LED_2: app_timer_stop(g_timer_led2); break;
-        case BLINKY_LED_3: app_timer_stop(g_timer_led3); break;
-        default: ASSERT(false);                          break;
+        case BLINKY_LED_0:
+            app_timer_stop(g_timer_led0);
+            break;
+        case BLINKY_LED_1:
+            app_timer_stop(g_timer_led1);
+            break;
+        case BLINKY_LED_2:
+            app_timer_stop(g_timer_led2);
+            break;
+        case BLINKY_LED_3:
+            app_timer_stop(g_timer_led3);
+            break;
+        default:
+            ASSERT(false);
+            break;
     }
 
     /* Initial state */
@@ -135,11 +145,21 @@ void blinky_led_soft_off(uint8_t led_idx)
 
     switch(led_idx)
     {
-        case BLINKY_LED_0: app_timer_stop(g_timer_led0); break;
-        case BLINKY_LED_1: app_timer_stop(g_timer_led1); break;
-        case BLINKY_LED_2: app_timer_stop(g_timer_led2); break;
-        case BLINKY_LED_3: app_timer_stop(g_timer_led3); break;
-        default: ASSERT(false);                          break;
+        case BLINKY_LED_0:
+            app_timer_stop(g_timer_led0);
+            break;
+        case BLINKY_LED_1:
+            app_timer_stop(g_timer_led1);
+            break;
+        case BLINKY_LED_2:
+            app_timer_stop(g_timer_led2);
+            break;
+        case BLINKY_LED_3:
+            app_timer_stop(g_timer_led3);
+            break;
+        default:
+            ASSERT(false);
+            break;
     }
 
     g_blink_leds[led_idx].duty_cycle = 0;

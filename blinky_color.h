@@ -15,6 +15,6 @@ typedef struct
     float v;
 } hsv_t;
 
-rgb_t hsv2rgb(hsv_t hsv);
+void hsv2rgb(hsv_t* hsv, rgb_t* rgb);
 
 #endif //BLINKY_COLOR_H__

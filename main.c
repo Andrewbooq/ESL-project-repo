@@ -212,7 +212,8 @@ void app_timer_move_handler(void * p_context)
             break;
     }
 
-    rgb_t rgb = hsv2rgb(g_data.hsv);
+    rgb_t rgb = {0.f};
+    hsv2rgb((hsv_t*)&(g_data.hsv), &rgb);
     blinky_set_led_rgb(&rgb);
 }
 
@@ -240,7 +241,8 @@ void blinky_init(void)
     blinky_btns_init(blinky_on_button_hold, blinky_on_button_release, blinky_on_button_multi_click);
 
     /* Color init */
-    rgb_t rgb = hsv2rgb(g_data.hsv);
+    rgb_t rgb = {0.f};
+    hsv2rgb((hsv_t*)&(g_data.hsv), &rgb);
     blinky_set_led_rgb(&rgb);
  }
 
