@@ -4,19 +4,19 @@
 
 void hsv2rgb(hsv_t* hsv, rgb_t* rgb)
 {
-	float r = 0.f;
+    float r = 0.f;
     float g = 0.f;
     float b = 0.f;
 	
-	float h = hsv->h / 360.f;
-	float s = hsv->s / 100.f;
-	float v = hsv->v / 100.f;
+    float h = hsv->h / 360.f;
+    float s = hsv->s / 100.f;
+    float v = hsv->v / 100.f;
 	
-	int i = floor(h * 6.f);
-	float f = h * 6.f - i;
-	float p = v * (1.f - s);
-	float q = v * (1.f - f * s);
-	float t = v * (1.f - (1.f - f) * s);
+    int i = floor(h * 6.f);
+    float f = h * 6.f - i;
+    float p = v * (1.f - s);
+    float q = v * (1.f - f * s);
+    float t = v * (1.f - (1.f - f) * s);
 	
 	switch (i % 6)
     {
