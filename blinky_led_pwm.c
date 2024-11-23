@@ -38,17 +38,26 @@ void blinky_led_pwm_init(void)
     nrfx_pwm_simple_playback(&g_pwm, &g_seq, 1, NRFX_PWM_FLAG_LOOP);
 }
 
-void blinky_led_pwm_set(uint8_t led_idx, uint8_t value)
+void blinky_led_pwm_set(uint8_t led_idx, uint8_t percent)
 {
     ASSERT(blinky_check_idx(led_idx));
-    uint16_t channel_value = value * NRFX_PWM_DEFAULT_CONFIG_TOP_VALUE / (uint16_t)100;
+    uint16_t channel_value = percent * NRFX_PWM_DEFAULT_CONFIG_TOP_VALUE / (uint16_t)100;
     
     switch (led_idx)
     {
-        case 0: g_seq_values.channel_0 = channel_value; break;
-        case 1: g_seq_values.channel_1 = channel_value; break;
-        case 2: g_seq_values.channel_2 = channel_value; break;
-        case 3: g_seq_values.channel_3 = channel_value; break;
-        default: break;
+        case 0:
+            g_seq_values.channel_0 = channel_value;
+            break;
+        case 1:
+            g_seq_values.channel_1 = channel_value;
+            break;
+        case 2:
+            g_seq_values.channel_2 = channel_value;
+            break;
+        case 3:
+            g_seq_values.channel_3 = channel_value;
+            break;
+        default:
+            break;
     }
 }
