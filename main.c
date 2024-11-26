@@ -67,8 +67,6 @@ static data_t g_data =
     }
 };
 
-//STATIC_ASSERT(sizeof(g_data.hsv) % sizeof(uint32_t) == 0, "struct must be aligned to 32 bit word");
-
 static char* blinky_state_to_str(state_t state)
 {
     switch(state)

@@ -183,10 +183,6 @@ bool blinky_nvmc_write_data(uint32_t* data, uint32_t size)
  
     g_last_addr += block_size;
 
-    // TODO: move waiting out of the module because it blocks the code until the writing complete
-    /* Waititng for complete writing */
-    while (!nrfx_nvmc_write_done_check())
-    {}
     NRF_LOG_INFO("NVMC: blinky_nvmc_write_data: writing complete");
     return true;
 }
