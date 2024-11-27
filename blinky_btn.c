@@ -73,7 +73,6 @@ void app_timer_debouncing_handler(void * p_context)
 
 void app_timer_multiclick_handler(void * p_context)
 {
-    NRF_LOG_INFO("BTN: app_timer_multiclick_handler");
     UNUSED_VARIABLE(p_context);
 
     if (g_on_button_multi_click)
@@ -86,7 +85,6 @@ void app_timer_multiclick_handler(void * p_context)
 
 void app_timer_hold_handler(void * p_context)
 {
-    NRF_LOG_INFO("BTN: app_timer_hold_handler");
     if (g_on_button_hold)
     {
         g_on_button_hold(NULL);

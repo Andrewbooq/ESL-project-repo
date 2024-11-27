@@ -16,7 +16,7 @@
 void blinky_led_pwm_init(void);
 
 /*  led_idx : from 0 to BLINKY_LEDS_ON_BOARD
-    value % : from 0 to 100 */
-void blinky_led_pwm_set(uint8_t led_idx, uint8_t value);
+    percent % : from 0 to 100 */
+void blinky_led_pwm_set(uint8_t led_idx, uint8_t percent);
 
 #endif /* BLINKY_LED_PWM_H__ */

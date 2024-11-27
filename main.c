@@ -237,7 +237,7 @@ void app_timer_move_handler(void * p_context)
     {
         case T_VIEW:
             break;
-    
+
         case T_EDIT_HUE:
             blinky_360_run(&(g_data.hsv.h));
             break;
@@ -256,7 +256,8 @@ void app_timer_move_handler(void * p_context)
             break;
     }
 
-    rgb_t rgb = hsv2rgb(g_data.hsv);
+    rgb_t rgb = {0.f};
+    hsv2rgb((hsv_t*)&(g_data.hsv), &rgb);
     blinky_set_led_rgb(&rgb);
 }
 
@@ -300,6 +301,7 @@ void blinky_init(void)
     /* Color init defaults */
     NRF_LOG_INFO("MAIN: Color init defaults");
     rgb_t rgb = hsv2rgb(g_data.hsv);
+
     blinky_set_led_rgb(&rgb);
  }
 
