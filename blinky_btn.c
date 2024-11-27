@@ -23,6 +23,7 @@ static click_cb_t g_on_button_multi_click = NULL;
 
 void button_click_handler(void)
 {
+    NRF_LOG_INFO("BTN: button_click_handler");
     g_click_cnt++;
     if (g_timer_multiclick_in_progress)
     {
