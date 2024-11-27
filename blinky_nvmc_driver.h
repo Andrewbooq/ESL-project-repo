@@ -1,6 +1,8 @@
 #ifndef BLINKY_NVMC_DRIVER_H__
 #define BLINKY_NVMC_DRIVER_H__
 
+#define BLINKY_WORD_SIZE                (sizeof(uint32_t))
+
 /* Address to write to. Must be word-aligned. */
 
 void blinky_read_block(uint32_t* addr, uint32_t* payload, uint32_t word_cnt);
