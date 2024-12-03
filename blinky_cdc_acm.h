@@ -2,7 +2,6 @@
 #define BLINKY_CDC_ACM_H__
 
 #include "blinky_types.h"
-#include "nordic_common.h"
 
  /* USB Communications Device Class */
  /* Subclass Abstract Control Model */

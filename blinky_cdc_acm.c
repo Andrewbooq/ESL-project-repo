@@ -36,21 +36,15 @@ APP_USBD_CDC_ACM_GLOBAL_DEF(usb_cdc_acm2,
 static void blinky_append_rx_char(char ch)
 {
     // end zero string
-    if(g_cdc_acm.cmd_index < (BLINKY_COMMAND_SIZE - 1))
+    if(g_cdc_acm.cmd_index < (BLINKY_COMMAND_BUF_SIZE - 1))
     {
         g_cdc_acm.command_buffer[g_cdc_acm.cmd_index] = ch;
         g_cdc_acm.cmd_index++;
     }
 }
 
-static void blinky_handle_command()
+static void blinky_handle_command(void)
 {
-//    if (strlen(g_cdc_acm.command_buffer) == 0)
-//    {
-//        // Don't react on enter empty string
-//        return;
-//    }
-
     if(g_cdc_acm.on_command)
         g_cdc_acm.on_command(g_cdc_acm.command_buffer);
 
@@ -66,7 +60,7 @@ static void usb_ev_handler(app_usbd_class_inst_t const * p_inst,
     case APP_USBD_CDC_ACM_USER_EVT_PORT_OPEN:
     {
         ret_code_t ret;
-        ret = app_usbd_cdc_acm_read(&usb_cdc_acm2, g_cdc_acm.rx_buffer, BLINKY_READ_SIZE);
+        ret = app_usbd_cdc_acm_read(&usb_cdc_acm2, g_cdc_acm.rx_buffer, BLINKY_READ_BUF_SIZE);
         UNUSED_VARIABLE(ret);
         break;
     }
@@ -128,11 +122,11 @@ static void usb_ev_handler(app_usbd_class_inst_t const * p_inst,
             else
             {
                 blinky_append_rx_char(g_cdc_acm.rx_buffer[0]);
-                ret = app_usbd_cdc_acm_write(&usb_cdc_acm2, g_cdc_acm.rx_buffer, BLINKY_READ_SIZE);
+                ret = app_usbd_cdc_acm_write(&usb_cdc_acm2, g_cdc_acm.rx_buffer, BLINKY_READ_BUF_SIZE);
             }
 
             /* Fetch data until internal buffer is empty */
-            ret = app_usbd_cdc_acm_read(&usb_cdc_acm2, g_cdc_acm.rx_buffer, BLINKY_READ_SIZE);
+            ret = app_usbd_cdc_acm_read(&usb_cdc_acm2, g_cdc_acm.rx_buffer, BLINKY_READ_BUF_SIZE);
         } while (ret == NRF_SUCCESS);
 
         break;
@@ -172,10 +166,10 @@ bool blinky_cdc_acm_send_str(const char* str)
     }
     
     CRITICAL_REGION_ENTER();
-    strncpy(g_cdc_acm.tx_buffer, str, BLINKY_SEND_SIZE);
+    strncpy(g_cdc_acm.tx_buffer, str, BLINKY_SEND_BUF_SIZE);
     g_cdc_acm.need_send = true;
     g_cdc_acm.sent = 0;
-    g_cdc_acm.want_to_send = strlen(str);
+    g_cdc_acm.want_to_send = MIN(strlen(str),BLINKY_SEND_BUF_SIZE);
     CRITICAL_REGION_EXIT();
     return true;
 }

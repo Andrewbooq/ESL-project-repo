@@ -60,10 +60,23 @@ The nRF52840 Dongle is supported by nRF Connect for Desktop as well as programmi
 
 ## Links
 
+TBD
 
+# Compiling
 
+To enable CLI need to use parameter `ESTC_USB_CLI_ENABLED=1`. To see correct log output need to use parameter `DEDUG=y`
 
+Example:
 
+```sh
+ESL-project/mbr/armgcc$ make ESTC_USB_CLI_ENABLED=1 DEDUG=y dfu
+```
+
+## CLI 
+
+Under Ubuntu ESL Virtual machine there are two devices /dev/ttyACM0 and /dev/ttyACM1. To get them workable need to use appropreate commad line parameters during building. 
+- `picocom /dev/ttyACM0` to observe log output
+- `picocom /dev/ttyACM1` to send commands
 
 
 
