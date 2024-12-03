@@ -6,13 +6,21 @@
 
 #include "blinky_log.h"
 
+#if defined(ESTC_USB_CLI_ENABLED) 
+#if (ESTC_USB_CLI_ENABLED == 1)
+#define USB_CLI_ENABLED
+#endif
+#endif
+
+#include "blinky_types.h"
 #include "blinky_led.h"
 #include "blinky_led_pwm.h"
 #include "blinky_led_soft.h"
 #include "blinky_color.h"
 #include "blinky_nvmc.h"
-
 #include "blinky_btn.h"
+#include "blinky_cdc_acm.h"
+#include "blinky_command.h"
 
 /* stock number of a board (DEVICE_ID=#ABCD) */
 #define BLINKY_SN_A         6
@@ -25,24 +33,6 @@
 
 #define BLINKY_VELOCITY_MS          50 /* timeout between steps of moving through colors */
 
-typedef enum
-{
-    T_VIEW,
-    T_EDIT_HUE,
-    T_EDIT_SATURATION,
-    T_EDIT_BRIGHTNESS,
-    T_COUNT
-} state_t;
-
-typedef struct 
-{
-    volatile state_t state;
-    volatile bool move_s_up;
-    volatile bool move_v_up;
-    volatile hsv_t hsv;
-    hsv_t saved_hsv;
-} data_t;
-
 APP_TIMER_DEF(g_timer_move);
 
 static data_t g_data =
@@ -50,6 +40,7 @@ static data_t g_data =
     .state = T_VIEW,
     .move_s_up = false,
     .move_v_up = false,
+    .need_save = false,
     .hsv = 
     {
         /* DEVICE_ID=6584
@@ -66,6 +57,8 @@ static data_t g_data =
         .v = 50.f 
     }
 };
+
+STATIC_ASSERT(sizeof(g_data.hsv) % sizeof(uint32_t) == 0, "struct must be aligned to 32 bit word");
 
 static char* blinky_state_to_str(state_t state)
 {
@@ -133,12 +126,12 @@ static void blinky_save_data(data_t* data)
     NRF_LOG_INFO("MAIN: blinky_save_data: g_data.saved_hsv.h=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved_hsv.h));
     NRF_LOG_INFO("MAIN: blinky_save_data: g_data.hsv.h=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.hsv.h));
     NRF_LOG_INFO("MAIN: ");
-    NRF_LOG_INFO("MAIN: blinky_save_data: g_data.saved_hsv.v=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved_hsv.v));
-    NRF_LOG_INFO("MAIN: blinky_save_data: g_data.hsv.v=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.hsv.v));
-    NRF_LOG_INFO("MAIN: ");
     NRF_LOG_INFO("MAIN: blinky_save_data: g_data.saved_hsv.s=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved_hsv.s));
     NRF_LOG_INFO("MAIN: blinky_save_data: g_data.hsv.s=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.hsv.s));
-
+    NRF_LOG_INFO("MAIN: ");
+    NRF_LOG_INFO("MAIN: blinky_save_data: g_data.saved_hsv.v=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved_hsv.v));
+    NRF_LOG_INFO("MAIN: blinky_save_data: g_data.hsv.v=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.hsv.v));
+    
     if ((abs(data->saved_hsv.h - data->hsv.h) < 1.f) &&
         (abs(data->saved_hsv.s - data->hsv.s) < 1.f) &&
         (abs(data->saved_hsv.v - data->hsv.v) < 1.f))
@@ -166,7 +159,6 @@ void blinky_on_button_multi_click(void * p_context)
         case 1:
         {
             NRF_LOG_INFO("MAIN: blinky_on_button_multi_click: Single click handling...");
-            NRF_LOG_INFO("MAIN: blinky_on_button_multi_click: blinky_nvmc_test");
             break;
         }
         case 2:
@@ -230,14 +222,86 @@ void blinky_100_run(volatile float* value, volatile bool* up)
         }
     }
 }
-
+#ifdef USB_CLI_ENABLED
+void blinky_on_command(char* s_command)
+{
+    NRF_LOG_INFO("MAIN: blinky_on_command...");
+    command_t t_command;
+    blinky_command_process(s_command, &t_command);
+    switch (t_command.type)
+    {
+        case T_RGB:
+        {
+            rgb2hsv(&t_command.color.rgb, (hsv_t*)&(g_data.hsv));
+            blinky_set_led_rgb(&t_command.color.rgb);
+            break;
+        }
+        case T_HSV:
+        {
+            g_data.hsv = t_command.color.hsv;
+            rgb_t rgb = { 0.f };
+            hsv2rgb((hsv_t*)&(g_data.hsv), &rgb);
+            blinky_set_led_rgb(&rgb);
+            break;
+        }
+        case T_HELP:
+        {
+            bool ret = blinky_cdc_acm_send_str(
+                "CLI to control Nordic PCA10059 board\r\n" \
+                "\r\n" \
+                "These are common CLI commands used in various situations:\r\n" \
+                "\r\n" \
+                "  help\t\t\toutput this information.\r\n" \
+                "  rgb {r} {g} {b}\tsetup the led 2 color, r - red component [0..100], g - green component [0..100], b - blue component [0..100].\r\n" \
+                "  hsv {h} {s} {v}\tsetup the led 2 color, h - hue component [0..360], s - saturation component [0..100], v - value/brightness component [0..100]. \r\n" \
+                "  save\t\t\tsave current color of led 2 to nvmc.\r\n" \
+                " \r\n");
+            if(!ret)
+            {
+                NRF_LOG_INFO("MAIN: blinky_on_command: Probably sending is to fast, the previous package is in progress");
+            }
+            break;
+        }
+        case T_SAVE:
+        {
+            /* Don't call long operation under interruption, just set the flag */
+            g_data.need_save = true;
+            break;
+        }
+        case T_EMPTY:
+        {
+            bool ret = blinky_cdc_acm_send_str(">\r\n");
+            if(!ret)
+            {
+                NRF_LOG_INFO("MAIN: blinky_on_command: Probably sending is to fast, the previous package is in progress");
+            }
+            break;
+        }
+        case T_UNKNOWN:// fall-through
+        default:
+        {
+            bool ret = blinky_cdc_acm_send_str(
+                "unknown command or wrong format\r\n" \
+                "\r\n" \
+                "usage: <command> [args]\r\n" \
+                "\r\n" \
+                "'help' to see available commands\r\n");
+            if(!ret)
+            {
+                NRF_LOG_INFO("MAIN: blinky_on_command: Probably sending is to fast, the previous package is in progress");
+            }
+            break;
+        }
+    }
+}
+#endif
 void app_timer_move_handler(void * p_context)
 {
     switch(g_data.state)
     {
         case T_VIEW:
             break;
-
+    
         case T_EDIT_HUE:
             blinky_360_run(&(g_data.hsv.h));
             break;
@@ -255,8 +319,8 @@ void app_timer_move_handler(void * p_context)
             ASSERT(false);
             break;
     }
-
-    rgb_t rgb = {0.f};
+ 
+    rgb_t rgb = { 0.f };
     hsv2rgb((hsv_t*)&(g_data.hsv), &rgb);
     blinky_set_led_rgb(&rgb);
 }
@@ -269,6 +333,10 @@ void blinky_init(void)
     ASSERT(NRF_SUCCESS == res);
     NRF_LOG_DEFAULT_BACKENDS_INIT();
 
+#ifdef USB_CLI_ENABLED
+    /* USB CDC ACM init */
+    blinky_cdc_acm_init(blinky_on_command);
+#endif
     /* Timers init */
     NRF_LOG_INFO("MAIN: Timers init");
     res = app_timer_init();
@@ -279,6 +347,12 @@ void blinky_init(void)
     /* Leds init */
     NRF_LOG_INFO("MAIN: Leds init");
     blinky_led_soft_init();
+
+    /* HACK to turn off leds that is a result of ASSERT in USB CDC ACM module during init */
+    blinky_led_pwm_set(BLINKY_LED_0, 0);
+    blinky_led_pwm_set(BLINKY_LED_1, 0);
+    blinky_led_pwm_set(BLINKY_LED_2, 0);
+    blinky_led_pwm_set(BLINKY_LED_3, 0);
 
     /* Buttons init */
     NRF_LOG_INFO("MAIN: Buttons init");
@@ -303,6 +377,8 @@ void blinky_init(void)
     rgb_t rgb = {0.f};
     hsv2rgb((hsv_t*)&(g_data.hsv), &rgb);
     blinky_set_led_rgb(&rgb);
+
+    
  }
 
 /* Application main entry.*/
@@ -316,10 +392,20 @@ int main(void)
     {
         LOG_BACKEND_USB_PROCESS();
         NRF_LOG_PROCESS();
+#ifdef USB_CLI_ENABLED
+        blinky_cdc_acm_loop();
+        
+        if (g_data.need_save)
+        {
+            blinky_save_data(&g_data);
+            g_data.need_save = false;
+        }
+#endif    
 
-#ifndef DEBUG_NRF
+
+#if !defined(DEBUG_NRF) && !defined(USB_CLI_ENABLED)
         /* Wait for interrapt.
-        Incorrect log output in sleep mode */
+        Incorrect log output and usb data exchange in sleep mode */
         __WFI();
 #endif
     }

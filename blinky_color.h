@@ -1,20 +1,9 @@
 #ifndef BLINKY_COLOR_H__
 #define BLINKY_COLOR_H__
 
-typedef struct
-{
-    float r;
-    float g;
-    float b;
-} rgb_t;
-
-typedef struct
-{
-    float h;
-    float s;
-    float v;
-} hsv_t;
+#include "blinky_types.h"
 
 void hsv2rgb(hsv_t* hsv, rgb_t* rgb);
+void rgb2hsv(rgb_t* rgb, hsv_t* hsv);
 
 #endif //BLINKY_COLOR_H__
