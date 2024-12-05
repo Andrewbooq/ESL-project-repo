@@ -4,6 +4,7 @@
 #include "blinky_led.h"
 #include "blinky_led_soft.h"
 #include "blinky_led_pwm.h"
+#include "blinky_types.h"
 
 APP_TIMER_DEF(g_timer_led0);
 APP_TIMER_DEF(g_timer_led1);
@@ -11,13 +12,6 @@ APP_TIMER_DEF(g_timer_led2);
 APP_TIMER_DEF(g_timer_led3);
 
 #define BLINKY_DARK_STEPS 50
-
-typedef struct
-{
-    volatile uint8_t duty_cycle;
-    volatile int8_t dark_step;
-    volatile bool up;
-} led_t;
 
 static led_t g_blink_leds[BLINKY_LEDS_ON_BOARD] = { 0 };
 

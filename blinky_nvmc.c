@@ -5,6 +5,7 @@
 #include "blinky_nvmc.h"
 #include "blinky_nvmc_driver.h"
 #include "blinky_log.h"
+#include "blinky_types.h"
 
 /* Didn't find how to get the BOOTLOADER_START_ADDR from SDK correctly */
 #define BLINKY_BOOTLOADER_START_ADDR    (0xE0000)
@@ -16,18 +17,6 @@
 
 #define BLINKY_PAGE0_BEGIN              BLINKY_APP_AREA_BEGIN_ADDR
 #define BLINKY_PAGE1_BEGIN              (BLINKY_PAGE0_BEGIN + BLINKY_PAGE_SIZE)
-
-typedef struct
-{
-    uint32_t block_size;
-} header_t;
-
-typedef struct
-{
-    bool need_to_erase_page0;
-    uint32_t* last_addr;
-    uint32_t writable_block_size;
-} nvmc_t;
 
 static nvmc_t g_nvmc = 
 {
@@ -206,7 +195,7 @@ bool blinky_nvmc_write_data(uint32_t* data, uint32_t size)
     return true;
 }
 
-bool blinky_nvmc_write_done_check()
+bool blinky_nvmc_write_done_check(void)
 {
     return blinky_driver_write_done_check();
 }

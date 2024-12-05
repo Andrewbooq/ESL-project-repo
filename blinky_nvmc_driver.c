@@ -27,7 +27,7 @@ bool blinky_block_writable_check(uint32_t* addr, uint32_t* payload, uint32_t wor
         
         if (!nrfx_nvmc_word_writable_check((uint32_t)addr, *payload))
         {
-            NRF_LOG_INFO("NVMC DRV: blinky_block_writable_check: payload data, addr=0x%x, value=0x%x is NOT writable", (uint32_t)addr, *payload);
+            //NRF_LOG_INFO("NVMC DRV: blinky_block_writable_check: payload data, addr=0x%x, value=0x%x is NOT writable", (uint32_t)addr, *payload);
             return false;
         }
 
@@ -48,7 +48,7 @@ void blinky_block_write(uint32_t* addr, uint32_t* payload, uint32_t word_cnt)
 
     for (uint32_t i = 0; i < word_cnt; ++i)
     {   
-        NRF_LOG_INFO("NVMC DRV: blinky_block_write: writing payload data, addr=0x%x, value=0x%x", (uint32_t)addr, *payload);
+        //NRF_LOG_INFO("NVMC DRV: blinky_block_write: writing payload data, addr=0x%x, value=0x%x", (uint32_t)addr, *payload);
         nrfx_nvmc_word_write((uint32_t)addr, *payload);
 
         addr++;

@@ -3,6 +3,7 @@
 
 #include "blinky_log.h"
 #include "blinky_btn.h"
+#include "blinky_types.h"
 
 #define BLINKY_BTN_0                        NRF_GPIO_PIN_MAP(1, 6)  /* 0 SW1 */
 #define BLINKY_BTN_ACTIVE_STATE             0
@@ -14,24 +15,26 @@ APP_TIMER_DEF(g_timer_debouncing);
 APP_TIMER_DEF(g_timer_multiclick);
 APP_TIMER_DEF(g_timer_hold);
 
-static volatile bool g_timer_multiclick_in_progress = false;
-static volatile uint32_t g_click_cnt = 0;
-
-static click_cb_t g_on_button_hold = NULL;
-static click_cb_t g_on_button_release = NULL;
-static click_cb_t g_on_button_multi_click = NULL;
+static btn_t g_btn = 
+{
+    .timer_multiclick_in_progress = false,
+    .click_cnt = 0,
+    .on_button_hold = NULL,
+    .on_button_release = NULL,
+    .on_button_multi_click = NULL
+};
 
 void button_click_handler(void)
 {
     NRF_LOG_INFO("BTN: button_click_handler");
-    g_click_cnt++;
-    if (g_timer_multiclick_in_progress)
+    g_btn.click_cnt++;
+    if (g_btn.timer_multiclick_in_progress)
     {
         app_timer_stop(g_timer_multiclick);
     }
     else
     {
-        g_timer_multiclick_in_progress = true;
+        g_btn.timer_multiclick_in_progress = true;
     }
     ret_code_t res = app_timer_start(g_timer_multiclick, APP_TIMER_TICKS(BLINKY_BTN_MULTICLICK_TIMEOUT_MS), NULL);
     ASSERT(NRF_SUCCESS == res);
@@ -50,9 +53,9 @@ void button_press_handler(void)
 void button_release_handler(void)
 {
     app_timer_stop(g_timer_hold);
-    if (g_on_button_release)
+    if (g_btn.on_button_release)
     {
-        g_on_button_release(NULL);
+        g_btn.on_button_release(NULL);
     }
 
     /* Make Click event as soon as user released the button as it implemented in most GUI */
@@ -75,19 +78,19 @@ void app_timer_multiclick_handler(void * p_context)
 {
     UNUSED_VARIABLE(p_context);
 
-    if (g_on_button_multi_click)
+    if (g_btn.on_button_multi_click)
     {
-        g_on_button_multi_click((void*)g_click_cnt);
+        g_btn.on_button_multi_click((void*)g_btn.click_cnt);
     }
-    g_timer_multiclick_in_progress = false;
-    g_click_cnt = 0;
+    g_btn.timer_multiclick_in_progress = false;
+    g_btn.click_cnt = 0;
 }
 
 void app_timer_hold_handler(void * p_context)
 {
-    if (g_on_button_hold)
+    if (g_btn.on_button_hold)
     {
-        g_on_button_hold(NULL);
+        g_btn.on_button_hold(NULL);
     }
 }
 
@@ -100,9 +103,9 @@ void button0_event_handler(nrfx_gpiote_pin_t pin, nrf_gpiote_polarity_t action)
 
 void blinky_btns_init(click_cb_t on_hold, click_cb_t on_release, click_cb_t on_multi_click)
 {
-    g_on_button_hold = on_hold;
-    g_on_button_release = on_release;
-    g_on_button_multi_click = on_multi_click;
+    g_btn.on_button_hold = on_hold;
+    g_btn.on_button_release = on_release;
+    g_btn.on_button_multi_click = on_multi_click;
 
     nrfx_err_t resx = nrfx_gpiote_init();
     ASSERT(NRFX_SUCCESS == resx);

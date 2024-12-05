@@ -41,24 +41,30 @@ static data_t g_data =
     .move_s_up = false,
     .move_v_up = false,
     .need_save = false,
-    .hsv = 
+    .current = 
     {
-        /* DEVICE_ID=6584
-           Last digits: 84
-           Hue: 84% => 360 * 0.84 = 302° */
-        .h = ((BLINKY_SN_C * 10.f) + BLINKY_SN_D)  * 360.f / 100.f,
-        .s = 100.f,
-        .v = 100.f
+        .hsv = 
+        {
+            /* DEVICE_ID=6584
+            Last digits: 84
+            Hue: 84% => 360 * 0.84 = 302° */
+            .h = ((BLINKY_SN_C * 10.f) + BLINKY_SN_D)  * 360.f / 100.f,
+            .s = 100.f,
+            .v = 100.f
+        },
     },
-    .saved_hsv = 
+    .saved = 
     {
-        .h = 50.f,
-        .s = 50.f,
-        .v = 50.f 
-    }
+        .hsv = 
+        {
+            .h = 50.f,
+            .s = 50.f,
+            .v = 50.f 
+        }
+    },
 };
 
-STATIC_ASSERT(sizeof(g_data.hsv) % sizeof(uint32_t) == 0, "struct must be aligned to 32 bit word");
+STATIC_ASSERT(sizeof(g_data.saved) % sizeof(uint32_t) == 0, "struct must be aligned to 32 bit word");
 
 static char* blinky_state_to_str(state_t state)
 {
@@ -115,7 +121,43 @@ void blinky_on_button_release(void * p_context)
     ret_code_t res = app_timer_stop(g_timer_move);
     ASSERT(NRF_SUCCESS == res);
 
-    NRF_LOG_INFO("MAIN: blinky_on_button_release: HSV: %d %d %d", g_data.hsv.h, g_data.hsv.s, g_data.hsv.v);
+    NRF_LOG_INFO("MAIN: blinky_on_button_release: HSV: %d %d %d", g_data.current.hsv.h, g_data.current.hsv.s, g_data.current.hsv.v);
+}
+ 
+static bool are_hsv_equal(hsv_t* first, hsv_t* second)
+{
+    ASSERT(NULL != first);
+    ASSERT(NULL != second);
+
+    if ((abs(first->h - second->h) < 1.f) &&
+        (abs(first->s - second->s) < 1.f) &&
+        (abs(first->v - second->v) < 1.f))
+    {
+        return true;
+    }
+    return false;
+}
+
+static bool blinky_are_current_equal(color_data_t* first, color_data_t* second)
+{
+    ASSERT(NULL != first);
+    ASSERT(NULL != second);
+    
+    if (!are_hsv_equal(&(first->hsv), &(second->hsv)))
+    {
+        return false;
+    }
+
+    for (uint32_t i = 0; i < BLINKY_SAVED_COLOR_CNT; ++i)
+    {
+        if( 0 != strcmp(first->hsvname_pair_array[i].name, second->hsvname_pair_array[i].name) ||
+            !are_hsv_equal(&(first->hsvname_pair_array[i].hsv), &(second->hsvname_pair_array[i].hsv)))
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 static void blinky_save_data(data_t* data)
@@ -123,29 +165,21 @@ static void blinky_save_data(data_t* data)
     NRF_LOG_INFO("MAIN: blinky_save_data");
     ASSERT(NULL != data);
 
-    NRF_LOG_INFO("MAIN: blinky_save_data: g_data.saved_hsv.h=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved_hsv.h));
-    NRF_LOG_INFO("MAIN: blinky_save_data: g_data.hsv.h=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.hsv.h));
-    NRF_LOG_INFO("MAIN: ");
-    NRF_LOG_INFO("MAIN: blinky_save_data: g_data.saved_hsv.s=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved_hsv.s));
-    NRF_LOG_INFO("MAIN: blinky_save_data: g_data.hsv.s=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.hsv.s));
-    NRF_LOG_INFO("MAIN: ");
-    NRF_LOG_INFO("MAIN: blinky_save_data: g_data.saved_hsv.v=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved_hsv.v));
-    NRF_LOG_INFO("MAIN: blinky_save_data: g_data.hsv.v=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.hsv.v));
-    
-    if ((abs(data->saved_hsv.h - data->hsv.h) < 1.f) &&
-        (abs(data->saved_hsv.s - data->hsv.s) < 1.f) &&
-        (abs(data->saved_hsv.v - data->hsv.v) < 1.f))
-        {
-            NRF_LOG_INFO("MAIN: blinky_save_data: Nothing to save");
-            return;
-        }
+    if (blinky_are_current_equal((color_data_t*)&(data->current), &(data->saved)))
+    {
+        NRF_LOG_INFO("MAIN: blinky_save_data: Nothing to save");
+        return;
+    }
 
-    bool result = blinky_nvmc_write_data((uint32_t*)&(data->hsv), sizeof(hsv_t));
+    bool result = blinky_nvmc_write_data((uint32_t*)&(data->current), sizeof(data->current));
     NRF_LOG_INFO("MAIN: blinky_save_data: blinky_nvmc_write_data result=%d", result);
-    while (!blinky_nvmc_write_done_check())
-    {}
+    if(result)
+    {
+        while (!blinky_nvmc_write_done_check())
+        {}
+    }
     NRF_LOG_INFO("MAIN: blinky_save_data: writing complete");
-    data->saved_hsv.h = data->hsv.h;
+    memcpy(&(g_data.saved), (void*)&(g_data.current), sizeof(g_data.saved));
 }
 
 void blinky_on_button_multi_click(void * p_context)
@@ -181,7 +215,7 @@ void blinky_on_button_multi_click(void * p_context)
     }
 }
 
-void blinky_set_led_rgb(rgb_t* rgb)
+static void blinky_set_led_rgb(rgb_t* rgb)
 {
     ASSERT(NULL != rgb);
     blinky_led_pwm_set(BLINKY_LED_R, rgb->r);
@@ -189,7 +223,7 @@ void blinky_set_led_rgb(rgb_t* rgb)
     blinky_led_pwm_set(BLINKY_LED_B, rgb->b);
 }
 
-void blinky_360_run(volatile float* value)
+static void blinky_360_run(volatile float* value)
 {
     ASSERT(NULL != value);
     *value += 1.f;
@@ -199,7 +233,7 @@ void blinky_360_run(volatile float* value)
     }
 }
 
-void blinky_100_run(volatile float* value, volatile bool* up)
+static void blinky_100_run(volatile float* value, volatile bool* up)
 {
     ASSERT(NULL != value);
     ASSERT(NULL != up);
@@ -223,43 +257,106 @@ void blinky_100_run(volatile float* value, volatile bool* up)
     }
 }
 #ifdef USB_CLI_ENABLED
+
+static int32_t blinky_get_empty_name_index(hsvname_pair_t* hsvname_pair, uint32_t size)
+{
+    ASSERT(NULL != hsvname_pair);
+    for(uint32_t i = 0; i < size; ++i)
+    {
+        if (0 == strlen(hsvname_pair[i].name))
+        {
+            return i;
+        }
+    }
+    return -1;    
+}
+
+static int32_t blinky_get_index_by_name(hsvname_pair_t* hsvname_pair, uint32_t size, char* name)
+{
+    ASSERT(NULL != hsvname_pair);
+    ASSERT(NULL != name);
+    for(uint32_t i = 0; i < BLINKY_SAVED_COLOR_CNT; ++i)
+    {
+        if (0 == strcmp(hsvname_pair[i].name, name))
+        {
+            return i;
+        }
+    }
+    return -1;    
+}
+
 void blinky_on_command(char* s_command)
 {
     NRF_LOG_INFO("MAIN: blinky_on_command...");
     command_t t_command;
     blinky_command_process(s_command, &t_command);
+    bool ret = true;
     switch (t_command.type)
     {
+        case T_EMPTY:
+        {
+            ret = blinky_cdc_acm_send_str(BLINKY_WELCOME_STRING);
+            break;
+        }
         case T_RGB:
         {
-            rgb2hsv(&t_command.color.rgb, (hsv_t*)&(g_data.hsv));
-            blinky_set_led_rgb(&t_command.color.rgb);
+            rgb2hsv(&t_command.color_data.rgb, (hsv_t*)&(g_data.current.hsv));
+            blinky_set_led_rgb(&t_command.color_data.rgb);
+            break;
+        }
+        case T_RGBNAME:
+        {
+            int32_t index = blinky_get_index_by_name((hsvname_pair_t*)g_data.current.hsvname_pair_array, BLINKY_SAVED_COLOR_CNT, t_command.color_data.rgbname_pair.name);
+            if (index >= 0)
+            {
+                ret = blinky_cdc_acm_send_str(BLINKY_ITEM_EXISTS_STRING);
+                break;
+            }
+            index = blinky_get_empty_name_index((hsvname_pair_t*)g_data.current.hsvname_pair_array, BLINKY_SAVED_COLOR_CNT);
+            if (index < 0)
+            {
+                ret = blinky_cdc_acm_send_str(BLINKY_FULL_STORAGE_STRING);
+            }
+            else
+            {
+                hsv_t hsv = {0.f};
+                rgb2hsv(&t_command.color_data.rgbname_pair.rgb, &hsv);
+                g_data.current.hsvname_pair_array[index].hsv = hsv;
+                strncpy((char*)g_data.current.hsvname_pair_array[index].name, t_command.color_data.rgbname_pair.name, BLINKY_COLOR_NAME_SIZE);
+            }
             break;
         }
         case T_HSV:
         {
-            g_data.hsv = t_command.color.hsv;
+            g_data.current.hsv = t_command.color_data.hsv;
             rgb_t rgb = { 0.f };
-            hsv2rgb((hsv_t*)&(g_data.hsv), &rgb);
+            hsv2rgb((hsv_t*)&(g_data.current.hsv), &rgb);
             blinky_set_led_rgb(&rgb);
             break;
         }
-        case T_HELP:
+        case T_HSVNAME:
         {
-            bool ret = blinky_cdc_acm_send_str(
-                "CLI to control Nordic PCA10059 board\r\n" \
-                "\r\n" \
-                "These are common CLI commands used in various situations:\r\n" \
-                "\r\n" \
-                "  help\t\t\toutput this information.\r\n" \
-                "  rgb {r} {g} {b}\tsetup the led 2 color, r - red component [0..100], g - green component [0..100], b - blue component [0..100].\r\n" \
-                "  hsv {h} {s} {v}\tsetup the led 2 color, h - hue component [0..360], s - saturation component [0..100], v - value/brightness component [0..100]. \r\n" \
-                "  save\t\t\tsave current color of led 2 to nvmc.\r\n" \
-                " \r\n");
-            if(!ret)
+            int32_t index = blinky_get_index_by_name((hsvname_pair_t*)g_data.current.hsvname_pair_array, BLINKY_SAVED_COLOR_CNT, t_command.color_data.hsvname_pair.name);
+            if (index >= 0)
             {
-                NRF_LOG_INFO("MAIN: blinky_on_command: Probably sending is to fast, the previous package is in progress");
+                ret = blinky_cdc_acm_send_str(BLINKY_ITEM_EXISTS_STRING);
+                break;
             }
+            index = blinky_get_empty_name_index((hsvname_pair_t*)g_data.current.hsvname_pair_array, BLINKY_SAVED_COLOR_CNT);
+            if (index < 0)
+            {
+                ret = blinky_cdc_acm_send_str(BLINKY_FULL_STORAGE_STRING);
+            }
+            else
+            {
+                g_data.current.hsvname_pair_array[index].hsv = t_command.color_data.hsvname_pair.hsv;
+                strncpy((char*)g_data.current.hsvname_pair_array[index].name, t_command.color_data.hsvname_pair.name, BLINKY_COLOR_NAME_SIZE);
+            }
+            break;
+        }
+        case T_HELP: 
+        {
+            ret = blinky_cdc_acm_send_str(BLINKY_HELP_STRING);
             break;
         }
         case T_SAVE:
@@ -268,30 +365,80 @@ void blinky_on_command(char* s_command)
             g_data.need_save = true;
             break;
         }
-        case T_EMPTY:
+        case T_ADD_CURRENT_COLOR:
         {
-            bool ret = blinky_cdc_acm_send_str(">\r\n");
-            if(!ret)
+            int32_t index = blinky_get_index_by_name((hsvname_pair_t*)g_data.current.hsvname_pair_array, BLINKY_SAVED_COLOR_CNT, t_command.color_data.name);
+            if (index >= 0)
             {
-                NRF_LOG_INFO("MAIN: blinky_on_command: Probably sending is to fast, the previous package is in progress");
+                ret = blinky_cdc_acm_send_str(BLINKY_ITEM_EXISTS_STRING);
+                break;
             }
+            index = blinky_get_empty_name_index((hsvname_pair_t*)g_data.current.hsvname_pair_array, BLINKY_SAVED_COLOR_CNT);
+            if (index < 0)
+            {
+                ret = blinky_cdc_acm_send_str(BLINKY_FULL_STORAGE_STRING);
+            }
+            else
+            {
+                g_data.current.hsvname_pair_array[index].hsv = g_data.current.hsv;
+                strncpy((char*)g_data.current.hsvname_pair_array[index].name, t_command.color_data.name, BLINKY_COLOR_NAME_SIZE);
+            }
+            break;
+        }
+        case T_DELETE_COLOR:
+        {
+            int32_t index = blinky_get_index_by_name((hsvname_pair_t*)g_data.current.hsvname_pair_array, BLINKY_SAVED_COLOR_CNT, t_command.color_data.name);
+            if (index < 0)
+            {
+                ret = blinky_cdc_acm_send_str(BLINKY_NO_ITEM_STRING);
+            }
+            else
+            {
+                memset((void*)&g_data.current.hsvname_pair_array[index], 0, sizeof(hsvname_pair_t));
+            }
+            break;
+        }
+        case T_APPLY_COLOR:
+        {
+            int32_t index = blinky_get_index_by_name((hsvname_pair_t*)g_data.current.hsvname_pair_array, BLINKY_SAVED_COLOR_CNT, t_command.color_data.name);
+            if (index < 0)
+            {
+                ret = blinky_cdc_acm_send_str(BLINKY_NO_ITEM_STRING);
+            }
+            else
+            {
+                g_data.current.hsv = g_data.current.hsvname_pair_array[index].hsv;
+                rgb_t rgb = { 0.f };
+                hsv2rgb((hsv_t*)&(g_data.current.hsv), &rgb);
+                blinky_set_led_rgb(&rgb);
+            }
+            break;
+        }
+        case T_LIST_COLOR:
+        {
+            char name_list [BLINKY_SAVED_COLOR_CNT * (BLINKY_COLOR_NAME_SIZE + 2)] = { 0 };
+            for(uint32_t i = 0; i < BLINKY_SAVED_COLOR_CNT; ++i)
+            {
+                if (0 != strlen((char*)g_data.current.hsvname_pair_array[i].name))
+                {
+                    strncat(name_list, (char*)g_data.current.hsvname_pair_array[i].name, BLINKY_COLOR_NAME_SIZE);
+                    strncat(name_list, "\r\n", 2);
+                }
+            }
+            ret = blinky_cdc_acm_send_str(name_list);
             break;
         }
         case T_UNKNOWN:// fall-through
         default:
         {
-            bool ret = blinky_cdc_acm_send_str(
-                "unknown command or wrong format\r\n" \
-                "\r\n" \
-                "usage: <command> [args]\r\n" \
-                "\r\n" \
-                "'help' to see available commands\r\n");
-            if(!ret)
-            {
-                NRF_LOG_INFO("MAIN: blinky_on_command: Probably sending is to fast, the previous package is in progress");
-            }
+            ret = blinky_cdc_acm_send_str(BLINKY_UNKNOW_STRING);
             break;
         }
+    }
+
+    if(!ret)
+    {
+        NRF_LOG_INFO("MAIN: blinky_on_command: Probably sending is to fast, the previous package is in progress");
     }
 }
 #endif
@@ -303,15 +450,15 @@ void app_timer_move_handler(void * p_context)
             break;
     
         case T_EDIT_HUE:
-            blinky_360_run(&(g_data.hsv.h));
+            blinky_360_run(&(g_data.current.hsv.h));
             break;
 
         case T_EDIT_SATURATION:
-            blinky_100_run(&(g_data.hsv.s), &(g_data.move_s_up));
+            blinky_100_run(&(g_data.current.hsv.s), &(g_data.move_s_up));
             break;
 
         case T_EDIT_BRIGHTNESS:
-            blinky_100_run(&(g_data.hsv.v), &(g_data.move_v_up));
+            blinky_100_run(&(g_data.current.hsv.v), &(g_data.move_v_up));
             break;
 
         case T_COUNT: // fall-through
@@ -321,12 +468,15 @@ void app_timer_move_handler(void * p_context)
     }
  
     rgb_t rgb = { 0.f };
-    hsv2rgb((hsv_t*)&(g_data.hsv), &rgb);
+    hsv2rgb((hsv_t*)&(g_data.current.hsv), &rgb);
     blinky_set_led_rgb(&rgb);
 }
 
 void blinky_init(void)
 {
+    memset((void*)g_data.current.hsvname_pair_array, 0, sizeof(g_data.current.hsvname_pair_array));
+    memset((void*)g_data.saved.hsvname_pair_array, 0, sizeof(g_data.saved.hsvname_pair_array));
+
     /* Logs init */
     ret_code_t res = NRF_LOG_INIT(NULL);
     UNUSED_VARIABLE(res);
@@ -360,22 +510,30 @@ void blinky_init(void)
 
     /* NVMC init */
     NRF_LOG_INFO("MAIN: NVMC init");
-    blinky_nvmc_init(sizeof(hsv_t));
+    ASSERT(sizeof(g_data.saved) == sizeof(g_data.current))
+    blinky_nvmc_init(sizeof(g_data.saved));
     
-    uint32_t read = blinky_nvmc_read_last_data((uint32_t*)&(g_data.saved_hsv), sizeof(g_data.saved_hsv));
+    uint32_t read = blinky_nvmc_read_last_data((uint32_t*)&(g_data.saved), sizeof(g_data.saved));
     NRF_LOG_INFO("MAIN: blinky_on_button_multi_click: blinky_nvmc_get_last_data read %u bytes", read);
     if (read > 0)
     {
-        NRF_LOG_INFO("MAIN: blinky_on_button_multi_click: g_data.saved_hsv.h=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved_hsv.h));
-        NRF_LOG_INFO("MAIN: blinky_on_button_multi_click: g_data.saved_hsv.v=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved_hsv.v));
-        NRF_LOG_INFO("MAIN: blinky_on_button_multi_click: g_data.saved_hsv.s=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved_hsv.s));
-        g_data.hsv = g_data.saved_hsv;
+        NRF_LOG_INFO("MAIN: saved.hsv.h=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved.hsv.h));
+        NRF_LOG_INFO("MAIN: saved.hsv.v=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved.hsv.v));
+        NRF_LOG_INFO("MAIN: saved.hsv.s=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved.hsv.s));
+        for (uint32_t i = 0; i < BLINKY_SAVED_COLOR_CNT; ++i)
+        {
+            NRF_LOG_INFO("MAIN: hsvname_pair.name=%s", g_data.saved.hsvname_pair_array[i].name);
+            NRF_LOG_INFO("MAIN: hsvname_pair.hsv.h=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved.hsvname_pair_array[i].hsv.h));
+            NRF_LOG_INFO("MAIN: hsvname_pair.hsv.v=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved.hsvname_pair_array[i].hsv.v));
+            NRF_LOG_INFO("MAIN: hsvname_pair.hsv.s=" NRF_LOG_FLOAT_MARKER, NRF_LOG_FLOAT(g_data.saved.hsvname_pair_array[i].hsv.s));
+        }
+        memcpy((void*)&(g_data.current), &(g_data.saved), sizeof(g_data.saved));
     }
 
     /* Color init defaults */
     NRF_LOG_INFO("MAIN: Color init defaults");
     rgb_t rgb = {0.f};
-    hsv2rgb((hsv_t*)&(g_data.hsv), &rgb);
+    hsv2rgb((hsv_t*)&(g_data.current.hsv), &rgb);
     blinky_set_led_rgb(&rgb);
 
     
